@@ -4,9 +4,25 @@ import { getDbConfig } from './dbconfig.service';
 
 const ROOT = path.resolve(process.cwd(), '..'); // raíz del repo (un nivel arriba del backend)
 
+// Rutas comunes de git en Windows; si está en PATH se usa 'git' directamente
+const GIT_PATHS = [
+    'git',
+    'C:\\Program Files\\Git\\cmd\\git.exe',
+    'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
+];
+
 function run(cmd: string, cwd: string): Promise<string> {
     return new Promise((resolve) => {
-        exec(cmd, { cwd }, (_err, stdout, stderr) => {
+        // Hereda el PATH del proceso e inyecta las rutas comunes de git
+        const env = {
+            ...process.env,
+            PATH: [
+                process.env.PATH,
+                'C:\\Program Files\\Git\\cmd',
+                'C:\\Program Files (x86)\\Git\\cmd',
+            ].filter(Boolean).join(';'),
+        };
+        exec(cmd, { cwd, env }, (_err, stdout, stderr) => {
             resolve((stdout + stderr).trim());
         });
     });
