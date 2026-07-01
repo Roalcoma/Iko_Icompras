@@ -1,0 +1,24 @@
+# Dependencias
+node_modules/
+
+# Build
+dist/
+
+# Env y credenciales
+.env
+.env.*
+config/connections.json
+
+# Logs
+*.log
+logs/
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.user
+
+# OS
+Thumbs.db
+.DS_Store

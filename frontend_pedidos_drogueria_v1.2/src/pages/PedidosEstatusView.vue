@@ -1,0 +1,412 @@
+<template>
+  <v-container fluid class="pa-6 bg-background h-100">
+    
+    <v-row class="mb-6">
+      <v-col cols="12" class="d-flex align-center">
+        <v-icon size="40" color="primary" class="mr-4">mdi-store-clock-outline</v-icon>
+        <div>
+          <h1 class="text-h4 font-weight-black mb-0" style="color: #164E63;">Seguimiento de Órdenes</h1>
+          <p class="text-body-2 text-grey-darken-1">Gestione el flujo logístico y actualice estados</p>
+        </div>
+        <v-spacer></v-spacer>
+        <v-btn 
+          prepend-icon="mdi-sync" 
+          variant="flat" 
+          color="white" 
+          class="text-primary elevation-1 rounded-pill px-6"
+          :loading="loading"
+          @click="obtenerPedidos()"
+        >
+          Refrescar
+        </v-btn>
+      </v-col>
+    </v-row>
+
+    <v-row>
+      <v-col cols="12">
+        <v-card elevation="2" class="rounded-xl border-0 overflow-hidden">
+          <v-data-table-server
+            v-model:items-per-page="itemsPerPage"
+            :headers="headers"
+            :items="pedidos"
+            :items-length="totalPedidos"
+            :loading="loading"
+            class="custom-table"
+            @update:options="cargarPagina"
+          >
+            <template v-slot:item.ORDERID="{ item }">
+              <span class="font-weight-black text-primary">#{{ item.ORDERID }}</span>
+            </template>
+
+            <template v-slot:item.cliente_col="{ item }">
+              <div class="d-flex flex-column">
+                <span class="font-weight-medium">{{ item.CLIENTEID }} — {{ riesgosMap[item.CLIENTEID]?.NOMBRECLIENTE || '' }}</span>
+              </div>
+            </template>
+
+            <template v-slot:item.FECHA="{ item }">
+              <div class="d-flex flex-column text-caption">
+                <span class="font-weight-bold">{{ formatearFecha(item.FECHA) }}</span>
+                <span class="text-grey">{{ formatearHora(item.FECHA) }}</span>
+              </div>
+            </template>
+
+            <template v-slot:item.RIESGO="{ item }">
+              <v-chip
+                v-if="riesgosMap[item.CLIENTEID]"
+                :color="getColorRiesgo(riesgosMap[item.CLIENTEID].ESTATUS)"
+                size="small"
+                variant="flat"
+                class="font-weight-black cursor-pointer px-4"
+                @click="verDetalleRiesgo(item.CLIENTEID)"
+              >
+                {{ riesgosMap[item.CLIENTEID].ESTATUS }}
+                <v-icon end size="14">mdi-information-outline</v-icon>
+              </v-chip>
+              <v-progress-circular v-else indeterminate size="16" width="2" color="grey"></v-progress-circular>
+            </template>
+
+            <template v-slot:item.ESTATUS="{ item }">
+              <!-- Chip con menú si tiene transiciones posibles -->
+              <v-menu v-if="transicionesPermitidas(item.ESTATUS).length > 0" transition="scale-transition">
+                <template v-slot:activator="{ props }">
+                  <v-chip
+                    v-bind="props"
+                    :color="getColores(item.ESTATUS).color"
+                    class="font-weight-black text-uppercase justify-center elevation-1 cursor-pointer"
+                    style="min-width: 200px; height: 32px;"
+                  >
+                    <v-icon start size="16">mdi-chevron-down</v-icon>
+                    {{ item.ESTATUS || 'SIN ESTADO' }}
+                  </v-chip>
+                </template>
+
+                <v-list density="compact" class="rounded-lg">
+                  <v-list-item
+                    v-for="opcion in transicionesPermitidas(item.ESTATUS)"
+                    :key="opcion"
+                    :prepend-icon="getColores(opcion).icon"
+                    @click="actualizarEstatusBD(item, opcion)"
+                    color="primary"
+                  >
+                    <v-list-item-title class="text-caption font-weight-bold">{{ opcion }}</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
+
+              <!-- Chip estático para estados sin transición -->
+              <v-chip
+                v-else
+                :color="getColores(item.ESTATUS).color"
+                class="font-weight-black text-uppercase justify-center elevation-0 opacity-80"
+                style="min-width: 200px; height: 32px;"
+              >
+                {{ item.ESTATUS }}
+              </v-chip>
+            </template>
+
+            <template v-slot:item.TOTALPRECIO="{ item }">
+              <v-chip color="secondary" variant="tonal" class="font-weight-black">
+                $ {{ (item.TOTALPRECIO || 0).toFixed(2) }}
+              </v-chip>
+            </template>
+
+            <template v-slot:item.acciones="{ item }">
+              <v-btn
+                v-if="puedeEditar"
+                icon="mdi-pencil-outline"
+                variant="text"
+                :disabled="item.ESTATUS !== 'PENDIENTE'"
+                :color="item.ESTATUS === 'PENDIENTE' ? 'blue-grey-darken-2' : 'grey-lighten-2'"
+                @click="irAEdicion(item)"
+              ></v-btn>
+              <v-btn
+                icon="mdi-file-pdf-box"
+                variant="text"
+                color="red-darken-2"
+                :loading="pdfCargando === item.ORDERID"
+                @click="imprimirPDF(item)"
+              ></v-btn>
+            </template>
+
+          </v-data-table-server>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <v-dialog v-model="modalRiesgo.show" max-width="500">
+      <v-card v-if="modalRiesgo.data" class="rounded-xl pa-2">
+        <v-card-title class="d-flex align-center py-4">
+          <v-icon :color="getColorRiesgo(modalRiesgo.data.ESTATUS)" class="mr-3" size="32">mdi-shield-account</v-icon>
+          <div>
+            <div class="text-h6 font-weight-black">Análisis de Crédito</div>
+            <div class="text-caption text-grey">{{ modalRiesgo.data.NOMBRECLIENTE }}</div>
+          </div>
+        </v-card-title>
+        
+        <v-divider></v-divider>
+
+        <v-card-text class="py-6">
+          <v-row dense>
+            <v-col cols="6">
+              <div class="text-caption text-grey text-uppercase font-weight-bold">Límite Concedido</div>
+              <div class="text-h6 font-weight-bold">$ {{ modalRiesgo.data.RIESGOCONCEDIDO.toLocaleString() }}</div>
+            </v-col>
+            <v-col cols="6" class="text-right">
+              <div class="text-caption text-grey text-uppercase font-weight-bold">Deuda Actual (CxC)</div>
+              <div class="text-h6 font-weight-bold text-error">$ {{ Number(modalRiesgo.data.CX || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }) }}</div>
+            </v-col>
+          </v-row>
+
+          <div class="mt-6">
+            <div class="d-flex justify-space-between mb-2 align-end">
+              <span class="text-subtitle-2 font-weight-bold">Uso del Crédito</span>
+              <span class="text-h5 font-weight-black" :style="{ color: getColorRiesgo(modalRiesgo.data.ESTATUS) }">
+                {{ modalRiesgo.data.PORCENTAJE_RIESGO.toFixed(1) }}%
+              </span>
+            </div>
+            <v-progress-linear
+              :model-value="modalRiesgo.data.PORCENTAJE_RIESGO"
+              :color="getColorRiesgo(modalRiesgo.data.ESTATUS)"
+              height="12"
+              rounded
+              striped
+            ></v-progress-linear>
+          </div>
+
+          <v-alert
+            :color="getColorRiesgo(modalRiesgo.data.ESTATUS)"
+            variant="tonal"
+            class="mt-6 rounded-lg"
+            border="start"
+          >
+            <template v-slot:prepend>
+              <v-icon size="24">mdi-alert-circle-outline</v-icon>
+            </template>
+            El cliente se encuentra en estatus <strong>{{ modalRiesgo.data.ESTATUS }}</strong>. 
+            {{ modalRiesgo.data.PORCENTAJE_RIESGO >= 100 ? 'Se requiere pago inmediato para liberar nuevas órdenes.' : 'Crédito disponible para procesamiento.' }}
+          </v-alert>
+        </v-card-text>
+
+        <v-card-actions class="pa-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" color="grey-darken-1" @click="modalRiesgo.show = false" class="px-6">Cerrar</v-btn>
+          <v-btn color="primary" variant="elevated" rounded="pill" class="px-6" @click="modalRiesgo.show = false">Entendido</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" rounded="pill">
+      {{ snackbar.text }}
+    </v-snackbar>
+  </v-container>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import axios from 'axios';
+import { useRouter } from 'vue-router';
+import { generarPedidoPDF } from '../utils/pedidoPDF';
+import { useAuthStore } from '../stores/useAuthStore';
+
+const router    = useRouter();
+const authStore = useAuthStore();
+
+const BIT_AUTORIZADOR = 2048;
+const BIT_BACKOFFICE  = 16;
+const BIT_EDICION     = 8;
+const vis = computed(() => Number(authStore.usuario?.visibilidad ?? 0));
+const puedeAutorizar = computed(() => (vis.value & BIT_AUTORIZADOR) !== 0 || (vis.value & BIT_BACKOFFICE) !== 0);
+const puedeEditar    = computed(() => (vis.value & BIT_EDICION)     !== 0 || (vis.value & BIT_BACKOFFICE) !== 0);
+const pedidos     = ref<any[]>([]);
+const pdfCargando = ref<string | null>(null);
+const totalPedidos = ref(0);
+const loading = ref(false);
+const itemsPerPage = ref(10);
+const snackbar = ref({ show: false, text: '', color: '' });
+
+const riesgosMap = ref<Record<number, any>>({});
+const modalRiesgo = ref({ show: false, data: null as any });
+
+const TRANSICIONES_BASE: Record<string, string[]> = {
+  'PENDIENTE':                  ['PENDIENTE POR AUTORIZACION', 'AUTORIZADO', 'CANCELADO'],
+  'PENDIENTE POR AUTORIZACION': ['AUTORIZADO', 'CANCELADO'],
+  'AUTORIZADO':                 ['EMPACADO', 'CANCELADO'],
+  'EMPACADO':                   ['FINALIZADO'],
+};
+
+// Filtra las opciones según permisos del usuario actual
+const transicionesPermitidas = (estatus: string): string[] => {
+  const todas = TRANSICIONES_BASE[estatus] ?? [];
+  if (puedeAutorizar.value) return todas;
+  return todas.filter(t => t !== 'AUTORIZADO' && t !== 'CANCELADO');
+};
+
+const headers = [
+  { title: 'ORDEN', key: 'ORDERID', align: 'start' as const },
+  { title: 'REGISTRO', key: 'FECHA', align: 'start' as const },
+  { title: 'CLIENTE', key: 'cliente_col', align: 'start' as const, sortable: false },
+  { title: 'RIESGO', key: 'RIESGO', align: 'center' as const, sortable: false },
+  { title: 'ESTADO ACTUAL', key: 'ESTATUS', align: 'center' as const, sortable: false },
+  { title: 'TOTAL', key: 'TOTALPRECIO', align: 'end' as const },
+  { title: 'ACCIONES', key: 'acciones', align: 'center' as const, sortable: false },
+];
+
+const obtenerPedidos = async (page = 1, limit = 10) => {
+  loading.value = true;
+  try {
+    const response = await axios.get(`${import.meta.env.VITE_API_URL}/pedidos?page=${page}&limit=${limit}`);
+    if (response.data.success) {
+      pedidos.value = response.data.data;
+      totalPedidos.value = response.data.total ?? 0;
+      cargarRiesgosMasivos();
+    }
+  } catch (error) {
+    lanzarNotificacion('Error al cargar datos', 'error');
+  } finally {
+    loading.value = false;
+  }
+};
+
+const cargarRiesgosMasivos = async () => {
+  const idsUnicos = [...new Set(pedidos.value.map(p => p.CLIENTEID))];
+  if (idsUnicos.length === 0) return;
+
+  try {
+    const res = await axios.post(`${import.meta.env.VITE_API_URL}/clientes/riesgo-masivo`, {
+      codclientes: idsUnicos
+    });
+    if (res.data.success && res.data.riesgos) {
+      const nuevoMapa: Record<number, any> = {};
+      res.data.riesgos.forEach((r: any) => { nuevoMapa[r.CODCLIENTE] = r; });
+      riesgosMap.value = nuevoMapa;
+    }
+  } catch (e) {
+    console.error("Error cargando riesgos", e);
+  }
+};
+
+const verDetalleRiesgo = (clienteId: number) => {
+  if (riesgosMap.value[clienteId]) {
+    modalRiesgo.value.data = riesgosMap.value[clienteId];
+    modalRiesgo.value.show = true;
+  }
+};
+
+const getColorRiesgo = (status: string) => {
+  const s = status?.toUpperCase() || '';
+  if (s === 'BAJO') return 'success';
+  if (s === 'MEDIO') return 'orange';
+  if (s === 'ALTO') return 'red-darken-2';
+  if (s === 'SUPERADO') return 'grey-darken-4';
+  return 'grey';
+};
+
+const cargarPagina = ({ page, itemsPerPage }: any) => {
+  obtenerPedidos(page, itemsPerPage);
+};
+
+const actualizarEstatusBD = async (item: any, nuevoStatus: string) => {
+  const orderId     = item.ORDERID;
+  const statusActual = item.ESTATUS;
+
+  // Verificar que la transición esté permitida
+  const permitidos = transicionesPermitidas(statusActual);
+  if (!permitidos.includes(nuevoStatus)) {
+    return lanzarNotificacion(`No se puede cambiar de "${statusActual}" a "${nuevoStatus}"`, 'warning');
+  }
+
+  try {
+    const res = await axios.put(`${import.meta.env.VITE_API_URL}/pedidos/status`, {
+      orderId,
+      status: nuevoStatus
+    });
+    if (res.data.success) {
+      // Actualizar el item en la lista local para respuesta inmediata
+      item.ESTATUS = nuevoStatus;
+      lanzarNotificacion(`Estatus de #${orderId} actualizado a ${nuevoStatus}`, 'success');
+    }
+  } catch (error: any) {
+    const msg = error.response?.data?.message || 'Error al actualizar estatus';
+    lanzarNotificacion(msg, 'error');
+  }
+};
+
+const getColores = (status: string) => {
+  if (!status) return { color: 'grey', icon: 'mdi-circle-outline' };
+  const s = status.toUpperCase().trim();
+  if (s === 'APROBACION PSICOTROPICOS') return { color: 'purple-darken-3', icon: 'mdi-shield-alert' };
+  if (s === 'ICG')                      return { color: 'green-darken-3',  icon: 'mdi-check-decagram' };
+  if (s.includes('AUTORIZACION'))       return { color: 'orange-darken-3', icon: 'mdi-clock-alert' };
+  if (s === 'PENDIENTE')                return { color: 'amber-darken-3',  icon: 'mdi-clock-outline' };
+  if (s === 'AUTORIZADO')               return { color: 'blue-darken-2',   icon: 'mdi-check-circle' };
+  if (s === 'EMPACADO')                 return { color: 'purple-darken-1', icon: 'mdi-package-variant-closed' };
+  if (s === 'CANCELADO')                return { color: 'red-darken-2',    icon: 'mdi-cancel' };
+  if (s === 'FINALIZADO')               return { color: 'green-darken-2',  icon: 'mdi-flag-checkered' };
+  return { color: 'grey-darken-1', icon: 'mdi-circle-outline' };
+};
+
+const formatearFecha = (f: any) => f ? new Date(f).toLocaleDateString() : '---';
+const formatearHora = (f: any) => f ? new Date(f).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---';
+
+const lanzarNotificacion = (text: string, color: string) => {
+  snackbar.value = { show: true, text, color };
+};
+
+const irAEdicion = (item: any) => {
+  if (item.ESTATUS !== 'PENDIENTE') return;
+  router.push({ name: 'pedidos-edicion', query: { id: item.ORDERID } });
+};
+
+const imprimirPDF = async (item: any) => {
+  pdfCargando.value = item.ORDERID;
+  try {
+    const res = await axios.get(`${import.meta.env.VITE_API_URL}/pedidos?orderId=${item.ORDERID}`);
+    if (!res.data.success) { lanzarNotificacion('No se pudo cargar el pedido', 'error'); return; }
+
+    const pedido = res.data.data;
+    const lineas = pedido.lineas || [];
+    const cliente = riesgosMap.value[item.CLIENTEID];
+
+    await generarPedidoPDF({
+      numeroOrden: item.ORDERID,
+      fecha: item.FECHA,
+      estatus: item.ESTATUS,
+      cliente: {
+        codcliente: item.CLIENTEID,
+        nombrecliente: cliente?.NOMBRECLIENTE || `Cliente ${item.CLIENTEID}`,
+        nit: cliente?.CIF,
+        direccionFiscal: cliente?.DIRECCION || '',
+        direccionEnvio:  cliente?.DIRECCION || '',
+      },
+      lineas: lineas.map((l: any) => ({
+        codigo: l.CODARTICULO,
+        descripcion: l.DESCRIPCION || '',
+        cantidad: Number(l.PRODUCTCOUNT),
+        precioUnitario: Number(l.PRECIOUNITARIO),
+        descuentos: [l.DESCUENTO1, l.DESCUENTO2, l.DESCUENTO3, l.DESCUENTO4]
+          .map(Number).filter(d => d > 0),
+      })),
+      totalUSD: Number(item.TOTALPRECIO || 0),
+    });
+  } catch {
+    lanzarNotificacion('Error al generar el PDF', 'error');
+  } finally {
+    pdfCargando.value = null;
+  }
+};
+
+let refreshInterval: ReturnType<typeof setInterval> | null = null;
+onMounted(() => { refreshInterval = setInterval(() => obtenerPedidos(), 60_000); });
+onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
+</script>
+
+<style scoped>
+.custom-table :deep(th) {
+  font-weight: 900 !important;
+  color: #455A64 !important;
+  font-size: 0.75rem !important;
+}
+.cursor-pointer { cursor: pointer; }
+.opacity-80 { opacity: 0.9; }
+</style>

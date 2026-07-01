@@ -1,0 +1,38 @@
+# ==========================================
+# DEPENDENCIAS
+# ==========================================
+node_modules/
+
+# ==========================================
+# VARIABLES DE ENTORNO (¡CRÍTICO!)
+# ==========================================
+# Nunca debes subir tus secretos, contraseñas o tokens a Git
+.env
+.env.local
+.env.test
+.env.production
+
+# ==========================================
+# ARCHIVOS COMPILADOS DE TYPESCRIPT
+# ==========================================
+# Aquí es donde tsconfig.json escupe el código JavaScript final
+dist/
+build/
+out/
+
+# ==========================================
+# LOGS Y DEBUGGING
+# ==========================================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================================
+# ARCHIVOS DEL SISTEMA OPERATIVO Y EDITORES
+# ==========================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

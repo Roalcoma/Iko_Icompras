@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    /* Opciones Básicas */
+    "target": "ES2022", /* Versión de ECMAScript a la que se compilará (ES2022 es ideal para versiones recientes de Node.js). */
+    "module": "CommonJS", /* Sistema de módulos estándar para Node.js. */
+    "lib": [
+      "ES2022"
+    ], /* Librerías incluidas en la compilación. */
+    /* Rutas y Estructura */
+    "rootDir": "./src", /* Carpeta principal donde estará tu código TypeScript. */
+    "outDir": "./dist", /* Carpeta donde se guardará el código JavaScript ya compilado. */
+    /* Interoperabilidad y Módulos */
+    "esModuleInterop": true, /* Permite importar módulos CommonJS como si fueran ES Modules (ej. import express from 'express'). Fundamental. */
+    "forceConsistentCasingInFileNames": true, /* Evita errores de mayúsculas/minúsculas al importar archivos (útil si trabajas en Windows y despliegas en Linux). */
+    "resolveJsonModule": true, /* Permite importar archivos .json directamente en tus archivos .ts. */
+    /* Chequeo de Tipos (Estricto) */
+    "strict": true, /* Activa todas las opciones estrictas de TypeScript. Te ayudará a escribir código mucho más seguro. */
+    "noImplicitAny": true, /* Arroja error si no declaras un tipo y TypeScript no puede inferirlo (asume 'any'). */
+    "strictNullChecks": true, /* Evita errores comunes al obligarte a verificar si una variable puede ser 'null' o 'undefined'. */
+    /* Optimización de Compilación */
+    "skipLibCheck": true /* Omite la comprobación de tipos en los archivos de declaración (.d.ts) dentro de node_modules. Hace que la compilación sea mucho más rápida. */
+  },
+  "include": [
+    "src/**/*" /* Le indica a TypeScript que solo compile los archivos dentro de la carpeta 'src'. */
+  ],
+  "exclude": [
+    "node_modules", /* Excluye las dependencias. */
+    "dist" /* Excluye la carpeta de salida. */
+  ]
+}

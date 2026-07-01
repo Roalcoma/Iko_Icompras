@@ -1,0 +1,47 @@
+{
+  "name": "frontend-pedidos-drogueria",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "run-p type-check \"build-only {@}\" --",
+    "preview": "vite preview",
+    "build-only": "vite build",
+    "type-check": "vue-tsc --build --force",
+    "start": "serve -s dist -l 5173"
+  },
+  "dependencies": {
+    "@fontsource/roboto": "^5.2.10",
+    "@mdi/font": "7.4.47",
+    "@types/axios": "^0.9.36",
+    "axios": "^1.13.6",
+    "exceljs": "^4.4.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.30",
+    "vue-router": "^5.0.3",
+    "vuetify": "^4.0.2",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "serve": "^14.2.4",
+    "@tsconfig/node22": "^22.0.5",
+    "@types/node": "^24.12.0",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "@vue/tsconfig": "^0.9.0",
+    "npm-run-all2": "^8.0.4",
+    "sass-embedded": "^1.98.0",
+    "typescript": "~5.9.3",
+    "unplugin-fonts": "^1.4.0",
+    "vite": "^8.0.0",
+    "vite-plugin-vuetify": "^2.1.3",
+    "vue-tsc": "^3.2.5"
+  },
+  "overrides": {
+    "unplugin-fonts": {
+      "vite": "^8.0.0"
+    }
+  }
+}
