@@ -18,7 +18,7 @@ import { EcommerceService }   from "./services/ecommerce.service";
 import { dbModeMiddleware } from "./db/dbMode.middleware";
 
 const app  = Express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 9000;
 
 app.use(morgan("dev"));
 app.use(Express.json());

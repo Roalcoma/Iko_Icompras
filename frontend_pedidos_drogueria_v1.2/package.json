@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build --force",
-    "start": "serve -s dist -l 5173"
+    "start": "serve -s dist -l 9010"
   },
   "dependencies": {
     "@fontsource/roboto": "^5.2.10",

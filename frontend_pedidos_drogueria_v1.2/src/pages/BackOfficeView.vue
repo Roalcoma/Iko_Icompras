@@ -103,7 +103,7 @@
                 v-for="m in modulosDeUsuario(item.VISIBILIDAD)"
                 :key="m.bit"
                 size="x-small"
-                :color="m.codigo === 'BACKOFFICE' ? 'warning' : 'primary'"
+                :color="m.codigo === 'BACKOFFICE' ? 'warning' : m.codigo === 'AUTORIZADOR' ? 'deep-orange' : 'primary'"
                 variant="tonal"
                 :prepend-icon="m.icono"
               >{{ m.nombre }}</v-chip>
