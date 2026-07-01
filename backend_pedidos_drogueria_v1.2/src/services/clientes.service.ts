@@ -18,9 +18,8 @@ export class ClientesServices {
                     SELECT
                         CL.CODCLIENTE, CL.NOMBRECLIENTE, CL.CIF,
                         ISNULL(CL.TELEFONO1, '') TELF, ISNULL(CL.E_MAIL, '') EMAIL,
-                        ISNULL(TC.DTO, 0) DESCUENTO
+                        ISNULL((SELECT TOP 1 TRY_CAST(CCL.D1 AS FLOAT) FROM CLIENTESCAMPOSLIBRES CCL WHERE CCL.CODCLIENTE = CL.CODCLIENTE), 0) DESCUENTO
                     FROM CLIENTES CL
-                        LEFT JOIN TARIFASCLIENTE TC ON TC.CODCLIENTE = CL.CODCLIENTE AND TC.IDTARIFAV = 1
                     WHERE UPPER(ISNULL(CL.NOMBRECLIENTE,'')) LIKE @FILTRO OR UPPER(ISNULL(CL.CIF,'')) LIKE @FILTRO
                     ORDER BY CL.NOMBRECLIENTE
                     OFFSET @OFFSET ROWS FETCH NEXT @LIMIT ROWS ONLY
@@ -42,12 +41,12 @@ export class ClientesServices {
             const pool = await connectDb()
             await pool.request()
                 .input('CODCLIENTE', mssql.Int, codCliente)
-                .input('DTO', mssql.Float, descuento)
+                .input('D1', mssql.NVarChar, String(descuento))
                 .query(`
-                    IF EXISTS (SELECT 1 FROM TARIFASCLIENTE WHERE CODCLIENTE = @CODCLIENTE AND IDTARIFAV = 1)
-                        UPDATE TARIFASCLIENTE SET DTO = @DTO WHERE CODCLIENTE = @CODCLIENTE AND IDTARIFAV = 1
+                    IF EXISTS (SELECT 1 FROM CLIENTESCAMPOSLIBRES WHERE CODCLIENTE = @CODCLIENTE)
+                        UPDATE CLIENTESCAMPOSLIBRES SET D1 = @D1 WHERE CODCLIENTE = @CODCLIENTE
                     ELSE
-                        INSERT INTO TARIFASCLIENTE (CODCLIENTE, IDTARIFAV, DTO) VALUES (@CODCLIENTE, 1, @DTO)
+                        INSERT INTO CLIENTESCAMPOSLIBRES (CODCLIENTE, D1) VALUES (@CODCLIENTE, @D1)
                 `)
             return { success: true }
         } catch (error) {
@@ -96,13 +95,12 @@ export class ClientesServices {
                             ISNULL(CL.DIRECCION1, '') DIRECCION,
                             ISNULL(CL.DIRECCION1, '') DIRECCION_FISCAL,
                             ISNULL(CL.DIRECCION1, '') DIRECCION_ENVIO,
-                            ISNULL(TC.DTO, 0) DESCUENTO,
+                            ISNULL(TRY_CAST(CCL.D1 AS FLOAT), 0) DESCUENTO,
                             ISNULL((SELECT TOP 1 CG.PORCENTAJE_DESCUENTO FROM CTE_GRUPOCLIENTES CG WHERE CL.CODCLIENTE = CG.CODCLIENTE AND Regla_Aplicada = 'D3'), 0) DESCUENTO2,
                             ISNULL((SELECT TOP 1 CG.PORCENTAJE_DESCUENTO FROM CTE_GRUPOCLIENTES CG WHERE CL.CODCLIENTE = CG.CODCLIENTE AND Regla_Aplicada = 'D4'), 0) DESCUENTO3
-                        FROM 
+                        FROM
                             CLIENTES CL
                             LEFT JOIN CLIENTESCAMPOSLIBRES CCL ON CL.CODCLIENTE = CCL.CODCLIENTE
-                            LEFT JOIN TARIFASCLIENTE TC ON TC.CODCLIENTE = CL.CODCLIENTE AND IDTARIFAV = 1
                         WHERE 
                             (UPPER(ISNULL(CL.NOMBRECLIENTE, '')) LIKE ('%'+UPPER(REPLACE(LTRIM(RTRIM(@CIF)),' ','%'))+'%')
                             OR UPPER(ISNULL(CL.CIF, '')) LIKE ('%'+UPPER(REPLACE(LTRIM(RTRIM(@CIF)),' ','%'))+'%')
