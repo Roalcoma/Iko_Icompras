@@ -49,21 +49,29 @@ export async function ejecutarActualizacion(): Promise<ResultadoActualizacion> {
         };
     }
 
-    // 2. Reiniciar con NSSM después de que la respuesta llegue al cliente
+    // 2. Reiniciar con NSSM (solo si están configurados los nombres de servicio)
     const cfg = getDbConfig() as any;
-    const servicioBackend  = cfg.nssmServicioBackend  || 'pedidos-backend';
-    const servicioFrontend = cfg.nssmServicioFrontend || 'pedidos-frontend';
+    const servicioBackend  = (cfg.nssmServicioBackend  || '').trim();
+    const servicioFrontend = (cfg.nssmServicioFrontend || '').trim();
+
+    if (!servicioBackend && !servicioFrontend) {
+        return {
+            gitPull,
+            cambiosDetectados: true,
+            reiniciando: false,
+            mensaje: 'Actualización descargada. No hay servicios NSSM configurados — reinicia el backend manualmente para aplicar los cambios.',
+        };
+    }
 
     setTimeout(async () => {
-        // NSSM: reinicia los servicios registrados en Windows
-        await run(`nssm restart "${servicioBackend}"`,  ROOT).catch(() => {});
-        await run(`nssm restart "${servicioFrontend}"`, ROOT).catch(() => {});
+        if (servicioBackend)  await run(`nssm restart "${servicioBackend}"`,  ROOT).catch(() => {});
+        if (servicioFrontend) await run(`nssm restart "${servicioFrontend}"`, ROOT).catch(() => {});
     }, 2500);
 
     return {
         gitPull,
         cambiosDetectados: true,
         reiniciando: true,
-        mensaje: `Actualización descargada. Reiniciando servicios NSSM "${servicioBackend}" y "${servicioFrontend}" en ~3 segundos. Si los nombres son distintos, configúralos en Administración → Configuración BD.`,
+        mensaje: `Actualización descargada. Reiniciando servicios NSSM "${servicioBackend}" y "${servicioFrontend}" en ~3 segundos.`,
     };
 }
