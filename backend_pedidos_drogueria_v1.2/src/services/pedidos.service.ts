@@ -515,7 +515,18 @@ export class PedidosServices {
             const estatusLimpio = nuevoEstatus.trim().toUpperCase();
             const BIT_AUTORIZADOR = 2048;
             const BIT_BACKOFFICE  = 16;
-            const vis = visibilidadUsuario ?? 0;
+
+            const pool = await connectDb();
+
+            // Leer visibilidad directo de la BD — más confiable que el JWT
+            let vis = visibilidadUsuario ?? 0;
+            if (codusuario) {
+                const visRes = await pool.request()
+                    .input('COD', codusuario)
+                    .query(`SELECT ISNULL(VISIBILIDAD, 0) AS VIS FROM VENDEDORES WHERE CODVENDEDOR = @COD`);
+                if (visRes.recordset.length > 0) vis = Number(visRes.recordset[0].VIS);
+            }
+
             const puedeAutorizar = (vis & BIT_AUTORIZADOR) !== 0 || (vis & BIT_BACKOFFICE) !== 0;
 
             // Validar permiso para transiciones que requieren AUTORIZADOR
@@ -526,8 +537,6 @@ export class PedidosServices {
                     message: 'No tienes permiso para realizar esta transición. Se requiere el rol Autorizador.'
                 };
             }
-
-            const pool = await connectDb();
 
             // Obtener estatus actual para validar la transición
             const checkRes = await pool.request()
