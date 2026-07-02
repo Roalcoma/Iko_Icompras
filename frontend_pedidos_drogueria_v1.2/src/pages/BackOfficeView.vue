@@ -276,14 +276,21 @@
       <v-divider />
       <v-card-text class="pa-4">
         <p class="text-caption text-grey mb-3">
-          Ejecuta <code>git pull origin main</code> en el servidor. Si hay cambios, reinicia automáticamente con NSSM usando los nombres de servicio configurados arriba.
-          Asegúrate de que el servidor tenga acceso a GitHub y las credenciales configuradas.
+          Descarga el ZIP del repo desde GitHub y reemplaza los archivos del servidor. Reinicia automáticamente con NSSM si está configurado.
         </p>
         <v-btn color="grey-darken-3" variant="elevated" prepend-icon="mdi-source-pull" :loading="actualizando" @click="actualizarApp">
           Actualizar ahora
         </v-btn>
-        <v-card v-if="resultadoActualizacion" class="mt-4 pa-3 bg-grey-darken-4 rounded-lg" elevation="0">
-          <pre class="text-caption text-green-lighten-2" style="white-space:pre-wrap;font-family:monospace;">{{ resultadoActualizacion }}</pre>
+        <v-card v-if="resultadoActualizacion" class="mt-4 pa-3 rounded-lg" :class="resultadoActualizacion.success ? 'bg-grey-darken-4' : 'bg-red-darken-4'" elevation="0">
+          <div class="d-flex align-center mb-2">
+            <v-icon :color="resultadoActualizacion.success ? 'green-lighten-2' : 'red-lighten-2'" size="18" class="mr-2">
+              {{ resultadoActualizacion.success ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+            </v-icon>
+            <span class="text-caption font-weight-bold" :class="resultadoActualizacion.success ? 'text-green-lighten-2' : 'text-red-lighten-2'">
+              {{ resultadoActualizacion.mensaje }}
+            </span>
+          </div>
+          <pre class="text-caption text-grey-lighten-1 mt-2" style="white-space:pre-wrap;font-family:monospace;font-size:11px;">{{ (resultadoActualizacion.log ?? []).join('\n') }}</pre>
         </v-card>
       </v-card-text>
     </v-card>
@@ -592,16 +599,21 @@ const guardarDbConfigFn = async () => {
 
 // ─── Auto-actualizador ────────────────────────────────────────
 const actualizando          = ref(false);
-const resultadoActualizacion = ref('');
+const resultadoActualizacion = ref<any>(null);
 
 const actualizarApp = async () => {
   actualizando.value = true;
-  resultadoActualizacion.value = '';
+  resultadoActualizacion.value = null;
   try {
     const res = await axios.post(`${API_SIS}/actualizar`);
-    resultadoActualizacion.value = `${res.data.mensaje}\n\n--- git pull ---\n${res.data.gitPull}`;
+    resultadoActualizacion.value = res.data;
   } catch (e: any) {
-    resultadoActualizacion.value = `Error: ${e.response?.data?.message ?? e.message}`;
+    // El backend ya devuelve { success: false, mensaje, log } incluso en errores
+    resultadoActualizacion.value = e.response?.data ?? {
+      success: false,
+      mensaje: e.message,
+      log: ['No se pudo contactar al backend.'],
+    };
   } finally { actualizando.value = false; }
 };
 

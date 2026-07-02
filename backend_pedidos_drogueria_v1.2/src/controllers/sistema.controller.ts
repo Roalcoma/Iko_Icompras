@@ -76,12 +76,14 @@ export class SistemaController {
     static async actualizarApp(_req: Request, res: Response): Promise<void> {
         try {
             const resultado = await ejecutarActualizacion();
-            res.json({ success: true, ...resultado });
+            res.status(resultado.success ? 200 : 500).json(resultado);
         } catch (error) {
+            // No debería llegar aquí — ejecutarActualizacion ya captura sus errores internamente
             res.status(500).json({
                 success: false,
-                message: 'Error al ejecutar la actualización',
-                error: error instanceof Error ? error.message : 'Error desconocido'
+                mensaje: 'Error inesperado al ejecutar la actualización',
+                error: error instanceof Error ? error.message : 'Error desconocido',
+                log: [],
             });
         }
     }

@@ -80,72 +80,108 @@ function run(cmd: string, cwd: string): Promise<string> {
 }
 
 export interface ResultadoActualizacion {
+    success:           boolean;
     descarga:          string;
     archivosCopiados:  number;
     reiniciando:       boolean;
     mensaje:           string;
+    log:               string[];  // Pasos detallados para diagnosticar fallos
 }
 
+function ts() { return new Date().toISOString().slice(11, 23); } // HH:MM:SS.mmm
+
 export async function ejecutarActualizacion(): Promise<ResultadoActualizacion> {
-    limpiar(); // limpia restos de una actualización anterior fallida
+    const log: string[] = [];
+    const paso = (msg: string) => { log.push(`[${ts()}] ${msg}`); console.log('[Actualizador]', msg); };
 
-    // 1. Descargar ZIP desde GitHub
-    await descargarZip(ZIP_URL, ZIP_TMP);
+    paso(`Iniciando actualización desde ${ZIP_URL}`);
+    paso(`Directorio raíz: ${ROOT}`);
+    paso(`ZIP temporal: ${ZIP_TMP}`);
 
-    // 2. Extraer
-    fs.mkdirSync(EXTRACT_TMP, { recursive: true });
-    const zip = new AdmZip(ZIP_TMP);
-    zip.extractAllTo(EXTRACT_TMP, true);
+    limpiar();
+    paso('Archivos temporales anteriores limpiados.');
 
-    // GitHub extrae en una subcarpeta del tipo "proyecto-drogueria-main/"
-    const [subDir] = fs.readdirSync(EXTRACT_TMP);
-    const origenReal = path.join(EXTRACT_TMP, subDir);
+    // 1. Descargar ZIP
+    try {
+        paso('Conectando a GitHub para descargar ZIP...');
+        await descargarZip(ZIP_URL, ZIP_TMP);
+        const tamaño = fs.statSync(ZIP_TMP).size;
+        paso(`ZIP descargado correctamente (${(tamaño / 1024).toFixed(1)} KB).`);
+    } catch (err: any) {
+        paso(`ERROR en descarga: ${err.message}`);
+        paso('Causas comunes: sin acceso a internet, firewall bloqueando GitHub, repo privado sin token.');
+        limpiar();
+        return { success: false, descarga: ZIP_URL, archivosCopiados: 0, reiniciando: false, mensaje: `Falló la descarga: ${err.message}`, log };
+    }
 
-    // 3. Copiar archivos al proyecto, respetando los protegidos
+    // 2. Extraer ZIP
+    try {
+        paso('Extrayendo ZIP...');
+        fs.mkdirSync(EXTRACT_TMP, { recursive: true });
+        const zip = new AdmZip(ZIP_TMP);
+        zip.extractAllTo(EXTRACT_TMP, true);
+        const [subDir] = fs.readdirSync(EXTRACT_TMP);
+        paso(`ZIP extraído. Subcarpeta raíz en el ZIP: "${subDir}".`);
+        var origenReal = path.join(EXTRACT_TMP, subDir);
+    } catch (err: any) {
+        paso(`ERROR al extraer ZIP: ${err.message}`);
+        limpiar();
+        return { success: false, descarga: ZIP_URL, archivosCopiados: 0, reiniciando: false, mensaje: `Falló la extracción: ${err.message}`, log };
+    }
+
+    // 3. Copiar archivos
     let archivosCopiados = 0;
-    const copiarContando = (origen: string, destino: string, rel = '') => {
-        for (const entrada of fs.readdirSync(origen)) {
-            const relativa = rel ? `${rel}/${entrada}` : entrada;
-            if (PROTEGIDOS.some(p => relativa === p || relativa.startsWith(p + '/'))) continue;
-            const src = path.join(origen, entrada);
-            const dst = path.join(destino, entrada);
-            if (fs.statSync(src).isDirectory()) {
-                fs.mkdirSync(dst, { recursive: true });
-                copiarContando(src, dst, relativa);
-            } else {
-                fs.copyFileSync(src, dst);
-                archivosCopiados++;
+    try {
+        paso('Copiando archivos al proyecto (respetando protegidos)...');
+        const copiarContando = (origen: string, destino: string, rel = '') => {
+            for (const entrada of fs.readdirSync(origen)) {
+                const relativa = rel ? `${rel}/${entrada}` : entrada;
+                if (PROTEGIDOS.some(p => relativa === p || relativa.startsWith(p + '/'))) continue;
+                const src = path.join(origen, entrada);
+                const dst = path.join(destino, entrada);
+                if (fs.statSync(src).isDirectory()) {
+                    fs.mkdirSync(dst, { recursive: true });
+                    copiarContando(src, dst, relativa);
+                } else {
+                    fs.copyFileSync(src, dst);
+                    archivosCopiados++;
+                }
             }
-        }
-    };
-    copiarContando(origenReal, ROOT);
+        };
+        copiarContando(origenReal, ROOT);
+        paso(`${archivosCopiados} archivos copiados correctamente.`);
+    } catch (err: any) {
+        paso(`ERROR al copiar archivos: ${err.message}`);
+        paso('Puede ser un problema de permisos sobre la carpeta del proyecto.');
+        limpiar();
+        return { success: false, descarga: ZIP_URL, archivosCopiados, reiniciando: false, mensaje: `Falló la copia: ${err.message}`, log };
+    }
 
     // 4. Limpiar temporales
     limpiar();
+    paso('Temporales eliminados.');
 
-    // 5. Reiniciar con NSSM si está configurado
+    // 5. Reiniciar con NSSM
     const cfg = getDbConfig() as any;
     const servicioBackend  = (cfg.nssmServicioBackend  || '').trim();
     const servicioFrontend = (cfg.nssmServicioFrontend || '').trim();
 
     if (!servicioBackend && !servicioFrontend) {
-        return {
-            descarga: ZIP_URL,
-            archivosCopiados,
-            reiniciando: false,
-            mensaje: `${archivosCopiados} archivos actualizados. No hay servicios NSSM configurados — reinicia el backend manualmente para aplicar los cambios.`,
-        };
+        paso('No hay servicios NSSM configurados — reinicio manual requerido.');
+        return { success: true, descarga: ZIP_URL, archivosCopiados, reiniciando: false, mensaje: `${archivosCopiados} archivos actualizados. Reinicia el backend manualmente.`, log };
     }
 
+    paso(`Programando reinicio NSSM en 2.5s — backend: "${servicioBackend}", frontend: "${servicioFrontend}".`);
     setTimeout(async () => {
-        if (servicioBackend)  await run(`nssm restart "${servicioBackend}"`,  ROOT).catch(() => {});
-        if (servicioFrontend) await run(`nssm restart "${servicioFrontend}"`, ROOT).catch(() => {});
+        if (servicioBackend) {
+            const out = await run(`nssm restart "${servicioBackend}"`, ROOT).catch((e: any) => e.message);
+            console.log('[Actualizador][NSSM backend]', out);
+        }
+        if (servicioFrontend) {
+            const out = await run(`nssm restart "${servicioFrontend}"`, ROOT).catch((e: any) => e.message);
+            console.log('[Actualizador][NSSM frontend]', out);
+        }
     }, 2500);
 
-    return {
-        descarga: ZIP_URL,
-        archivosCopiados,
-        reiniciando: true,
-        mensaje: `${archivosCopiados} archivos actualizados. Reiniciando servicios NSSM en ~3 segundos.`,
-    };
+    return { success: true, descarga: ZIP_URL, archivosCopiados, reiniciando: true, mensaje: `${archivosCopiados} archivos actualizados. Reiniciando servicios NSSM en ~3 segundos.`, log };
 }
