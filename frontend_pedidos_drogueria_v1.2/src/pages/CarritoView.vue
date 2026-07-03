@@ -37,9 +37,9 @@
                       <div class="font-weight-bold text-on-surface">{{ item.DESCRIPCION }}</div>
                       <div class="text-caption text-grey">Código: {{ item.CODARTICULO }}</div>
                     </div>
-                    <v-chip v-if="item.ES_PSICOTROPICO === 'T'" color="purple-darken-2" size="x-small" variant="flat" class="font-weight-black ml-2">
-                      CONTROLADO
-                    </v-chip>
+                    <v-chip v-if="item.ES_PSICOTROPICO === 'T'" color="purple-darken-2" size="x-small" variant="flat" class="font-weight-black ml-2">CONTROLADO</v-chip>
+                    <v-chip v-else-if="item.NODTOAPLICABLE === true || item.NODTOAPLICABLE === 1" color="red-darken-2" size="x-small" variant="flat" class="font-weight-black ml-2">SIN DTO</v-chip>
+                    <v-chip v-else-if="Number(item.DIASPROTECCION ?? 0) > 0" color="teal-darken-2" size="x-small" variant="flat" class="font-weight-black ml-2">NI {{ item.DIASPROTECCION }}d</v-chip>
                   </div>
                   <div v-if="item.descuentos?.length" class="mt-1">
                     <v-chip size="x-small" color="orange-darken-2" variant="flat" class="font-weight-bold">
@@ -320,13 +320,24 @@ const exportarPDF = async (ordenId?: string) => {
   });
 };
 
-// --- PROCESAR VENTA (SEPARACIÓN POR PSICOTRÓPICOS) ---
+// --- PROCESAR VENTA (SEPARACIÓN POR TIPO: P / SD / NI / normal) ---
 const procesarVenta = async () => {
   if (!carritoStore.clienteSeleccionado) return;
   enviando.value = true;
 
-  const itemsNormales      = carritoStore.articulos.filter(art => art.ES_PSICOTROPICO !== 'T');
-  const itemsPsicotropicos = carritoStore.articulos.filter(art => art.ES_PSICOTROPICO === 'T');
+  // Prioridad: psicotrópico > sin descuento > no indexado > normal
+  const itemsP  = carritoStore.articulos.filter(art => art.ES_PSICOTROPICO === 'T');
+  const itemsSD = carritoStore.articulos.filter(art =>
+    art.ES_PSICOTROPICO !== 'T' && (art.NODTOAPLICABLE === true || art.NODTOAPLICABLE === 1)
+  );
+  const itemsNI = carritoStore.articulos.filter(art =>
+    art.ES_PSICOTROPICO !== 'T' && !(art.NODTOAPLICABLE === true || art.NODTOAPLICABLE === 1) &&
+    Number(art.DIASPROTECCION ?? 0) > 0
+  );
+  const itemsNormal = carritoStore.articulos.filter(art =>
+    art.ES_PSICOTROPICO !== 'T' && !(art.NODTOAPLICABLE === true || art.NODTOAPLICABLE === 1) &&
+    !(Number(art.DIASPROTECCION ?? 0) > 0)
+  );
 
   const mapearLineas = (items: any[]) => items.map(art => ({
     codarticulo:  parseInt(String(art.CODARTICULO)),
@@ -344,36 +355,21 @@ const procesarVenta = async () => {
 
   const num = await reservarNumeroPedido();
   const promesas: Promise<any>[] = [];
-
+  const clienteId  = parseInt(String(carritoStore.clienteSeleccionado.CODCLIENTE));
+  const codVendedor = authStore.usuario?.codVendedor ?? 1;
   const promocionesAplicadas = carritoStore.promocionesAplicadas;
 
-  if (itemsNormales.length > 0) {
-    const totalNormal = itemsNormales.reduce((acc, art) => acc + (calcularPrecioConDescuento(art) * art.cantidad), 0);
-    promesas.push(axios.post(`${import.meta.env.VITE_API_URL}/pedidos`, {
-      pedidos: {
-        orderId:     String(num),
-        clienteId:   parseInt(String(carritoStore.clienteSeleccionado.CODCLIENTE)),
-        codVendedor: authStore.usuario?.codVendedor ?? 1,
-        totalPed:    totalNormal,
-        lineas:      mapearLineas(itemsNormales),
-        promocionesAplicadas,
-      }
-    }));
-  }
+  const crearPedido = (sufijo: string, items: any[]) => {
+    const total = items.reduce((acc, art) => acc + (calcularPrecioConDescuento(art) * art.cantidad), 0);
+    return axios.post(`${import.meta.env.VITE_API_URL}/pedidos`, {
+      pedidos: { orderId: `${num}${sufijo}`, clienteId, codVendedor, totalPed: total, lineas: mapearLineas(items), promocionesAplicadas }
+    });
+  };
 
-  if (itemsPsicotropicos.length > 0) {
-    const totalPsico = itemsPsicotropicos.reduce((acc, art) => acc + (calcularPrecioConDescuento(art) * art.cantidad), 0);
-    promesas.push(axios.post(`${import.meta.env.VITE_API_URL}/pedidos`, {
-      pedidos: {
-        orderId:     `${num}P`,
-        clienteId:   parseInt(String(carritoStore.clienteSeleccionado.CODCLIENTE)),
-        codVendedor: authStore.usuario?.codVendedor ?? 1,
-        totalPed:    totalPsico,
-        lineas:      mapearLineas(itemsPsicotropicos),
-        promocionesAplicadas,
-      }
-    }));
-  }
+  if (itemsNormal.length > 0) promesas.push(crearPedido('', itemsNormal));
+  if (itemsP.length  > 0) promesas.push(crearPedido('P',  itemsP));
+  if (itemsSD.length > 0) promesas.push(crearPedido('SD', itemsSD));
+  if (itemsNI.length > 0) promesas.push(crearPedido('NI', itemsNI));
 
   try {
     const resultados = await Promise.all(promesas);

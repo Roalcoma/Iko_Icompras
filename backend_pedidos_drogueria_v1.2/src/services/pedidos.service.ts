@@ -324,11 +324,13 @@ export class PedidosServices {
                         ISNULL(LP.DESCUENTO2, 0) AS DESCUENTO2,
                         ISNULL(LP.DESCUENTO3, 0) AS DESCUENTO3,
                         ISNULL(LP.DESCUENTO4, 0) AS DESCUENTO4,
-                        LP.TOTALLINEA
+                        LP.TOTALLINEA,
+                        ISNULL(PCL.DIASPROTECCION, 0) AS DIASPROTECCION
                     FROM
                         ${esquema}.LINEA_PED LP
                         INNER JOIN ARTICULOS ON LP.CODARTICULO = ARTICULOS.CODARTICULO
                         LEFT JOIN ARTICULOSCAMPOSLIBRES ACL ON LP.CODARTICULO = ACL.CODARTICULO
+                        LEFT JOIN PROVEEDORESCAMPOSLIBRES PCL ON PCL.CODPROVEEDOR = ACL.CODPROVEEDORICG
                     WHERE
                         LP.ORDERID = @ORDERID
                 `);
