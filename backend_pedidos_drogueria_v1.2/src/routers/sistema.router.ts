@@ -14,5 +14,7 @@ sistemaRouter.get('/seq-pedidos',         authMiddleware, adminMiddleware, Siste
 sistemaRouter.post('/seq-pedidos',        authMiddleware, adminMiddleware, SistemaController.setSeqPedidos);
 sistemaRouter.get('/psicotropicos',       authMiddleware, adminMiddleware, SistemaController.getDptoPsicotropicos);
 sistemaRouter.post('/psicotropicos',      authMiddleware, adminMiddleware, SistemaController.guardarDptoPsicotropicos);
+sistemaRouter.get('/tarifa-catalogo',     authMiddleware, adminMiddleware, SistemaController.getTarifaCatalogo);
+sistemaRouter.post('/tarifa-catalogo',    authMiddleware, adminMiddleware, SistemaController.guardarTarifaCatalogo);
 
 export default sistemaRouter;

@@ -361,6 +361,37 @@
       </v-card-text>
     </v-card>
 
+    <!-- Tarifa base catálogo Excel -->
+    <v-card rounded="xl" elevation="2" class="mt-6">
+      <v-card-title class="pa-4 d-flex align-center">
+        <v-icon color="teal" class="mr-2">mdi-file-excel</v-icon>
+        <span class="font-weight-bold">Tarifa Base — Catálogo Excel</span>
+      </v-card-title>
+      <v-divider />
+      <v-card-text class="pa-4">
+        <p class="text-caption text-grey mb-3">
+          ID de tarifa (<code>PRECIOSVENTA.IDTARIFAV</code>) que se usa como precio base al generar el catálogo Excel por segmentos.
+          Los artículos con "No aplica descuento" quedan excluidos automáticamente.
+        </p>
+        <div class="d-flex align-center gap-3">
+          <v-text-field
+            v-model.number="tarifaBaseCatalogo"
+            label="ID de tarifa base"
+            type="number"
+            min="1"
+            variant="outlined"
+            density="compact"
+            hide-details
+            prepend-inner-icon="mdi-numeric"
+            style="max-width:220px;"
+          />
+          <v-btn color="teal" variant="elevated" :loading="guardandoTarifa" @click="guardarTarifaCatalogo">
+            Guardar
+          </v-btn>
+        </div>
+      </v-card-text>
+    </v-card>
+
     <!-- Configuración integración Ecommerce -->
     <v-card rounded="xl" elevation="2" class="mt-6">
       <v-card-title class="pa-4 d-flex align-center">
@@ -709,6 +740,27 @@ const guardarDptoPsicotropicos = async () => {
   } finally { guardandoDpto.value = false; }
 };
 
+// ─── Tarifa base catálogo ─────────────────────────────────────
+const tarifaBaseCatalogo = ref<number>(2);
+const guardandoTarifa = ref(false);
+
+const cargarTarifaCatalogo = async () => {
+  try {
+    const res = await axios.get(`${API_SIS}/tarifa-catalogo`);
+    if (res.data.success) tarifaBaseCatalogo.value = res.data.tarifaBaseCatalogo;
+  } catch { /* silencioso */ }
+};
+
+const guardarTarifaCatalogo = async () => {
+  guardandoTarifa.value = true;
+  try {
+    await axios.post(`${API_SIS}/tarifa-catalogo`, { tarifaBaseCatalogo: tarifaBaseCatalogo.value });
+    mostrarSnack(`Tarifa base del catálogo actualizada a ${tarifaBaseCatalogo.value}`, 'success');
+  } catch (e: any) {
+    mostrarSnack(e.response?.data?.message ?? 'Error al guardar', 'error');
+  } finally { guardandoTarifa.value = false; }
+};
+
 // ─── Auto-actualizador ────────────────────────────────────────
 const actualizando          = ref(false);
 const resultadoActualizacion = ref<any>(null);
@@ -734,6 +786,7 @@ onMounted(async () => {
   await cargarRutaEcommerce();
   await cargarDbConfig();
   await cargarDptoPsicotropicos();
+  await cargarTarifaCatalogo();
   await cargarSeq();
 });
 </script>

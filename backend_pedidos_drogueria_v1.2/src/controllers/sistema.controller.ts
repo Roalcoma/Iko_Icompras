@@ -103,6 +103,21 @@ export class SistemaController {
         res.json({ success: true, message: `Departamento de psicotrópicos actualizado a ${dptoPsicotropicos}` });
     }
 
+    static async getTarifaCatalogo(_req: Request, res: Response): Promise<void> {
+        const cfg = getDbConfigPublica() as any;
+        res.json({ success: true, tarifaBaseCatalogo: cfg.tarifaBaseCatalogo ?? 2 });
+    }
+
+    static async guardarTarifaCatalogo(req: Request, res: Response): Promise<void> {
+        const { tarifaBaseCatalogo } = req.body;
+        if (!Number.isInteger(Number(tarifaBaseCatalogo)) || Number(tarifaBaseCatalogo) <= 0) {
+            res.status(400).json({ success: false, message: 'tarifaBaseCatalogo debe ser un entero positivo' });
+            return;
+        }
+        guardarDbConfig({ tarifaBaseCatalogo: Number(tarifaBaseCatalogo) } as any);
+        res.json({ success: true, message: `Tarifa base del catálogo actualizada a ${tarifaBaseCatalogo}` });
+    }
+
     static async actualizarApp(_req: Request, res: Response): Promise<void> {
         try {
             const resultado = await ejecutarActualizacion();

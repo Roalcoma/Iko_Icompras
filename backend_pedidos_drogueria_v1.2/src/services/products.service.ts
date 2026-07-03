@@ -166,9 +166,10 @@ export class ProductsService {
     }
 
     static async getCatalogoSegmentos(): Promise<any[]> {
+        const { tarifaBaseCatalogo } = getDbConfig();
         const pool = await connectDb();
         const result = await pool.request()
-            .input('TARIFA', mssql.Int, USD)
+            .input('TARIFA', mssql.Int, tarifaBaseCatalogo)
             .query(`
                 SELECT DISTINCT A.CODARTICULO, A.REFPROVEEDOR,
                     ACL.DESCRIPCIONLARGA AS DESCRIPCION,
@@ -180,6 +181,7 @@ export class ProductsService {
                         AND PV.IDTARIFAV = @TARIFA
                 WHERE A.TIPOARTICULO = 'A'
                     AND A.DESCATALOGADO = 'F'
+                    AND ISNULL(A.NODTOAPLICABLE, 0) <> 1
                 ORDER BY ACL.DESCRIPCIONLARGA
             `);
         return result.recordset;
