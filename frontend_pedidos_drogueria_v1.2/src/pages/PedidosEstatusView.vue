@@ -490,6 +490,7 @@ const imprimirPDF = async (item: any) => {
         precioUnitario: Number(l.PRECIOUNITARIO),
         descuentos: [l.DESCUENTO1, l.DESCUENTO2, l.DESCUENTO3, l.DESCUENTO4]
           .map(Number).filter(d => d > 0),
+        sinDescuento: !!l.NODTOAPLICABLE,
         diasProteccion: Number(l.DIASPROTECCION ?? 0),
       })),
       totalUSD: Number(item.TOTALPRECIO || 0),

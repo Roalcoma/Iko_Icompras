@@ -9,6 +9,7 @@ export interface LineaPDF {
     precioUnitario: number;
     precioBase?: number;
     descuentos?: number[];
+    sinDescuento?: boolean;
     esControlado?: boolean;
     diasProteccion?: number;
 }
@@ -99,7 +100,7 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
     doc.text(
         maxDiasProteccion > 0
             ? `Monto Factura — NO INDEXADO (Protección proveedor: ${maxDiasProteccion} días)`
-            : 'Monto Factura — Indexa a partir de 30 días',
+            : 'Monto Factura — Indexado',
         30, datosFin - 1
     );
 
@@ -107,7 +108,7 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
     const sinPrecios = data.ocultarPrecios === true;
 
     const filas = data.lineas.map(l => {
-        const descPct = (!sinPrecios && l.descuentos?.length) ? `${l.descuentos.join('%+')}%` : '';
+        const descPct = (!sinPrecios && !l.sinDescuento && l.descuentos?.length) ? `${l.descuentos.join('%+')}%` : '';
         const row: any[] = [
             l.codigo,
             (l.descripcion || '') + (l.esControlado ? ' (CONTROLADO)' : ''),

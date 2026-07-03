@@ -370,7 +370,8 @@ export class PedidosServices {
                         ISNULL(LP.DESCUENTO3, 0) AS DESCUENTO3,
                         ISNULL(LP.DESCUENTO4, 0) AS DESCUENTO4,
                         LP.TOTALLINEA,
-                        ISNULL(PCL.DIASPROTECCION, 0) AS DIASPROTECCION
+                        ISNULL(PCL.DIASPROTECCION, 0) AS DIASPROTECCION,
+                        ISNULL(ARTICULOS.NODTOAPLICABLE, 0) AS NODTOAPLICABLE
                     FROM
                         ${esquema}.LINEA_PED LP
                         INNER JOIN ARTICULOS ON LP.CODARTICULO = ARTICULOS.CODARTICULO
