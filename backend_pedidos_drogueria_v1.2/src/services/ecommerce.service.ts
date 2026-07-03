@@ -283,7 +283,7 @@ export class EcommerceService {
             const artPH  = barcodes.map((b, i) => { artReq.input(`b${i}`, mssql.NVarChar(50), b); return `@b${i}`; }).join(',');
             const artRes = await artReq.query(`
                 SELECT AL.CODBARRAS, A.CODARTICULO,
-                       ISNULL(A.NODTOAPLICABLE,'F') AS NODTOAPLICABLE,
+                       ISNULL(A.NODTOAPLICABLE, 0) AS NODTOAPLICABLE,
                        ISNULL(A.REFPROVEEDOR,'')    AS REFPROVEEDOR
                 FROM ARTICULOSLIN AL
                 JOIN ARTICULOS    A ON A.CODARTICULO = AL.CODARTICULO
@@ -292,7 +292,7 @@ export class EcommerceService {
             artRes.recordset.forEach((r: any) => {
                 barcodeToArt.set(String(r.CODBARRAS), {
                     codarticulo: Number(r.CODARTICULO),
-                    nodto:       r.NODTOAPLICABLE === 'T',
+                    nodto:       r.NODTOAPLICABLE === true || r.NODTOAPLICABLE === 1,
                     ref:         r.REFPROVEEDOR,
                 });
             });

@@ -381,7 +381,7 @@ export class PromocionesService {
         const result = await request.query(`
             SELECT A.CODARTICULO
             FROM ARTICULOS A LEFT JOIN ARTICULOSCAMPOSLIBRES ACL ON ACL.CODARTICULO = A.CODARTICULO
-            WHERE A.TIPOARTICULO = 'A' AND A.DESCATALOGADO = 'F' AND ISNULL(A.NODTOAPLICABLE,'') <> 'T' AND (${where})
+            WHERE A.TIPOARTICULO = 'A' AND A.DESCATALOGADO = 'F' AND ISNULL(A.NODTOAPLICABLE, 0) <> 1 AND (${where})
         `);
         return result.recordset.map((r: any) => r.CODARTICULO);
     }
@@ -979,7 +979,7 @@ export class PromocionesService {
                 FROM APP_GRUPOS_ARTICULOS_DETALLE D
                 JOIN ARTICULOS A ON A.CODARTICULO = D.CODARTICULO
                 WHERE D.IDGRUPO IN (${idsManualArt.join(',')})
-                  AND ISNULL(A.NODTOAPLICABLE,'') <> 'T'
+                  AND ISNULL(A.NODTOAPLICABLE, 0) <> 1
             `)).recordset.forEach((r: any) => { (articulosPorGrupo[r.IDGRUPO] ??= []).push(r.CODARTICULO); });
         }
         for (const id of todosIdsGrpArt.filter(id => tiposGrpArt[id] === 'CONDICION')) {
