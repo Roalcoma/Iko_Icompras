@@ -260,22 +260,25 @@ export class PedidosServices {
                     LEFT JOIN CLIENTES CL ON CL.CODCLIENTE = CP.CLIENTEID
                     LEFT JOIN VENDEDORES V ON V.CODVENDEDOR = CP.CODVENDEDOR
                     LEFT JOIN (
-                        SELECT CODCLIENTE,
+                        SELECT CL.CODCLIENTE,
                             CASE
-                                WHEN ISNULL(RIESGOCONCEDIDO,0) = 0 THEN 'SIN LIMITE'
-                                WHEN (ISNULL(CX,0) * 100.0 / RIESGOCONCEDIDO) >= 100 THEN 'SUPERADO'
-                                WHEN (ISNULL(CX,0) * 100.0 / RIESGOCONCEDIDO) >= 75  THEN 'ALTO'
-                                WHEN (ISNULL(CX,0) * 100.0 / RIESGOCONCEDIDO) >= 50  THEN 'MEDIO'
+                                WHEN CL.RIESGOCONCEDIDO = 0 THEN 'SIN LIMITE'
+                                WHEN (ISNULL(SUM(T.IMPORTE),0) * 100.0 / CL.RIESGOCONCEDIDO) >= 100 THEN 'SUPERADO'
+                                WHEN (ISNULL(SUM(T.IMPORTE),0) * 100.0 / CL.RIESGOCONCEDIDO) >= 80  THEN 'ALTO'
+                                WHEN (ISNULL(SUM(T.IMPORTE),0) * 100.0 / CL.RIESGOCONCEDIDO) >= 30  THEN 'MEDIO'
                                 ELSE 'BAJO'
                             END AS ESTATUS
-                        FROM CLIENTES
+                        FROM CLIENTES CL
+                        LEFT JOIN TESORERIA T ON T.CODIGOINTERNO = CL.CODCLIENTE
+                            AND T.ESTADO = 'P' AND T.ORIGEN = 'C' AND T.SERIE NOT LIKE '%P'
+                        GROUP BY CL.CODCLIENTE, CL.RIESGOCONCEDIDO
                     ) CR ON CR.CODCLIENTE = CP.CLIENTEID
                 WHERE
-                    (@ESTATUS      IS NULL OR CP.ESTATUS   = @ESTATUS)
-                    AND (@BUSCAR_ID   IS NULL OR CP.ORDERID   LIKE @BUSCAR_ID)
-                    AND (@CLIENTE_ID  IS NULL OR CP.CLIENTEID  = @CLIENTE_ID)
+                    (@ESTATUS       IS NULL OR CP.ESTATUS    = @ESTATUS)
+                    AND (@BUSCAR_ID    IS NULL OR CP.ORDERID    LIKE @BUSCAR_ID)
+                    AND (@CLIENTE_ID   IS NULL OR CP.CLIENTEID  = @CLIENTE_ID)
                     AND (@COD_VENDEDOR IS NULL OR CP.CODVENDEDOR = @COD_VENDEDOR)
-                    AND (@RIESGO      IS NULL OR CR.ESTATUS     = @RIESGO)
+                    AND (@RIESGO       IS NULL OR CR.ESTATUS     = @RIESGO)
                 ORDER BY
                     CP.FECHA DESC
                 OFFSET @OFFSET ROWS
@@ -293,21 +296,24 @@ export class PedidosServices {
                 SELECT COUNT(*) AS TOTAL
                 FROM ${esquema}.CABECERA_PED CP
                 LEFT JOIN (
-                    SELECT CODCLIENTE,
+                    SELECT CL.CODCLIENTE,
                         CASE
-                            WHEN ISNULL(RIESGOCONCEDIDO,0) = 0 THEN 'SIN LIMITE'
-                            WHEN (ISNULL(CX,0) * 100.0 / RIESGOCONCEDIDO) >= 100 THEN 'SUPERADO'
-                            WHEN (ISNULL(CX,0) * 100.0 / RIESGOCONCEDIDO) >= 75  THEN 'ALTO'
-                            WHEN (ISNULL(CX,0) * 100.0 / RIESGOCONCEDIDO) >= 50  THEN 'MEDIO'
+                            WHEN CL.RIESGOCONCEDIDO = 0 THEN 'SIN LIMITE'
+                            WHEN (ISNULL(SUM(T.IMPORTE),0) * 100.0 / CL.RIESGOCONCEDIDO) >= 100 THEN 'SUPERADO'
+                            WHEN (ISNULL(SUM(T.IMPORTE),0) * 100.0 / CL.RIESGOCONCEDIDO) >= 80  THEN 'ALTO'
+                            WHEN (ISNULL(SUM(T.IMPORTE),0) * 100.0 / CL.RIESGOCONCEDIDO) >= 30  THEN 'MEDIO'
                             ELSE 'BAJO'
                         END AS ESTATUS
-                    FROM CLIENTES
+                    FROM CLIENTES CL
+                    LEFT JOIN TESORERIA T ON T.CODIGOINTERNO = CL.CODCLIENTE
+                        AND T.ESTADO = 'P' AND T.ORIGEN = 'C' AND T.SERIE NOT LIKE '%P'
+                    GROUP BY CL.CODCLIENTE, CL.RIESGOCONCEDIDO
                 ) CR ON CR.CODCLIENTE = CP.CLIENTEID
-                WHERE (@ESTATUS2      IS NULL OR CP.ESTATUS    = @ESTATUS2)
-                    AND (@BUSCAR_ID2   IS NULL OR CP.ORDERID    LIKE @BUSCAR_ID2)
-                    AND (@CLIENTE_ID2  IS NULL OR CP.CLIENTEID  = @CLIENTE_ID2)
+                WHERE (@ESTATUS2       IS NULL OR CP.ESTATUS    = @ESTATUS2)
+                    AND (@BUSCAR_ID2    IS NULL OR CP.ORDERID    LIKE @BUSCAR_ID2)
+                    AND (@CLIENTE_ID2   IS NULL OR CP.CLIENTEID  = @CLIENTE_ID2)
                     AND (@COD_VENDEDOR2 IS NULL OR CP.CODVENDEDOR = @COD_VENDEDOR2)
-                    AND (@RIESGO2      IS NULL OR CR.ESTATUS     = @RIESGO2)
+                    AND (@RIESGO2       IS NULL OR CR.ESTATUS     = @RIESGO2)
             `);
 
             return {
