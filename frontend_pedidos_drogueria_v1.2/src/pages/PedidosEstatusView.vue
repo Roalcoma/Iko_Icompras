@@ -151,6 +151,13 @@
                 @click="irAEdicion(item)"
               ></v-btn>
               <v-btn
+                v-if="item.ESTATUS === 'PENDIENTE'"
+                icon="mdi-delete-outline"
+                variant="text"
+                color="error"
+                @click="pedidoAEliminar = item; dialogEliminar = true"
+              ></v-btn>
+              <v-btn
                 icon="mdi-file-pdf-box"
                 variant="text"
                 color="red-darken-2"
@@ -226,6 +233,24 @@
       </v-card>
     </v-dialog>
 
+    <!-- Confirmación eliminar pedido -->
+    <v-dialog v-model="dialogEliminar" max-width="400">
+      <v-card class="rounded-xl">
+        <v-card-title class="pa-4 d-flex align-center">
+          <v-icon color="error" class="mr-2">mdi-alert</v-icon> Eliminar pedido
+        </v-card-title>
+        <v-card-text>
+          ¿Eliminar permanentemente el pedido <strong>#{{ pedidoAEliminar?.ORDERID }}</strong>?
+          Esta acción no se puede deshacer.
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" @click="dialogEliminar = false">Cancelar</v-btn>
+          <v-btn color="error" variant="flat" :loading="eliminando" @click="eliminarPedido">Eliminar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" rounded="pill">
       {{ snackbar.text }}
     </v-snackbar>
@@ -257,6 +282,9 @@ const totalPedidos = ref(0);
 const loading = ref(false);
 const itemsPerPage = ref(10);
 const snackbar = ref({ show: false, text: '', color: '' });
+const dialogEliminar  = ref(false);
+const pedidoAEliminar = ref<any>(null);
+const eliminando      = ref(false);
 
 const riesgosMap = ref<Record<number, any>>({});
 const modalRiesgo = ref({ show: false, data: null as any });
@@ -272,6 +300,8 @@ const TRANSICIONES_BASE: Record<string, string[]> = {
 const transicionesPermitidas = (estatus: string): string[] => {
   const todas = TRANSICIONES_BASE[estatus] ?? [];
   if (puedeAutorizar.value) return todas;
+  // Sin autorizar: pueden cancelar PENDIENTE, pero no avanzar a AUTORIZADO ni cancelar estados avanzados
+  if (estatus === 'PENDIENTE') return todas.filter(t => t !== 'AUTORIZADO');
   return todas.filter(t => t !== 'AUTORIZADO' && t !== 'CANCELADO');
 };
 
@@ -404,6 +434,27 @@ const formatearHora = (f: any) => f ? new Date(f).toLocaleTimeString([], { hour:
 
 const lanzarNotificacion = (text: string, color: string) => {
   snackbar.value = { show: true, text, color };
+};
+
+const eliminarPedido = async () => {
+  if (!pedidoAEliminar.value) return;
+  eliminando.value = true;
+  try {
+    const res = await axios.delete(`${import.meta.env.VITE_API_URL}/pedidos?orderId=${pedidoAEliminar.value.ORDERID}`);
+    if (res.data.success) {
+      pedidos.value = pedidos.value.filter(p => p.ORDERID !== pedidoAEliminar.value.ORDERID);
+      totalPedidos.value--;
+      lanzarNotificacion(`Pedido #${pedidoAEliminar.value.ORDERID} eliminado`, 'success');
+    } else {
+      lanzarNotificacion(res.data.message || 'Error al eliminar', 'error');
+    }
+  } catch (e: any) {
+    lanzarNotificacion(e.response?.data?.message || 'Error al eliminar', 'error');
+  } finally {
+    eliminando.value = false;
+    dialogEliminar.value = false;
+    pedidoAEliminar.value = null;
+  }
 };
 
 const irAEdicion = (item: any) => {

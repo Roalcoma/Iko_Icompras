@@ -150,7 +150,8 @@
                     <div class="font-weight-bold text-on-surface">{{ linea.DESCRIPCION || 'Sin descripción' }}</div>
                     <div class="text-caption text-grey">Código: {{ linea.CODARTICULO }}</div>
                     <div v-if="descuentosDeLinea(linea).length" class="mt-1">
-                      <v-chip size="x-small" color="orange-darken-2" variant="flat" class="font-weight-bold">
+                      <v-chip size="x-small" color="orange-darken-2" variant="flat" class="font-weight-bold cursor-pointer"
+                        @click="abrirDescuento(linea)">
                         {{ descuentosDeLinea(linea).join('%+') }}% descuento
                       </v-chip>
                     </div>
@@ -170,7 +171,8 @@
                   </td>
                   <td class="text-right font-weight-bold">$ {{ (linea.PRECIOUNITARIO * linea.PRODUCTCOUNT).toFixed(2) }}</td>
                   <td class="text-center">
-                    <v-btn icon="mdi-delete-outline" color="error" variant="text" @click="eliminarLinea(index)" />
+                    <v-btn icon="mdi-sale" size="small" color="orange-darken-2" variant="text" @click="abrirDescuento(linea)" />
+                    <v-btn icon="mdi-delete-outline" size="small" color="error" variant="text" @click="confirmarEliminarLinea(index)" />
                   </td>
                 </tr>
               </tbody>
@@ -218,6 +220,47 @@
           <v-card-actions>
             <v-spacer />
             <v-btn variant="text" @click="modalBusqueda = false">Cerrar</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Modal descuento manual -->
+      <v-dialog v-model="modalDescuento.mostrar" max-width="400">
+        <v-card class="rounded-xl">
+          <v-card-title class="bg-orange-darken-2 text-white px-6 py-4">
+            <v-icon start>mdi-sale</v-icon> Descuentos Comerciales
+          </v-card-title>
+          <v-card-text class="pt-6 px-6">
+            <p class="text-subtitle-1 font-weight-bold mb-4">{{ modalDescuento.linea?.DESCRIPCION }}</p>
+            <v-list v-if="descuentosDeLinea(modalDescuento.linea || {}).length" border class="rounded-lg mb-4">
+              <v-list-item v-for="(d, i) in descuentosDeLinea(modalDescuento.linea || {})" :key="i">
+                <v-list-item-title class="font-weight-bold text-orange-darken-3">Descuento: {{ d }}%</v-list-item-title>
+                <template v-slot:append>
+                  <v-btn icon="mdi-close-circle" variant="text" color="error" @click="quitarDescuento(modalDescuento.linea, i)" />
+                </template>
+              </v-list-item>
+            </v-list>
+            <div class="d-flex align-center">
+              <v-text-field v-model.number="modalDescuento.nuevoValor" label="Nuevo %" variant="outlined" type="number" hide-details />
+              <v-btn color="orange-darken-2" height="56" class="ml-2 font-weight-bold px-6" @click="agregarDescuento">AÑADIR</v-btn>
+            </div>
+          </v-card-text>
+          <v-card-actions class="pa-4">
+            <v-spacer />
+            <v-btn color="grey" variant="text" @click="modalDescuento.mostrar = false">Cerrar</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Confirmación eliminar línea -->
+      <v-dialog v-model="confirmarEliminar.mostrar" max-width="360">
+        <v-card class="rounded-xl">
+          <v-card-title class="pa-4">¿Eliminar artículo?</v-card-title>
+          <v-card-text>Se quitará <strong>{{ confirmarEliminar.descripcion }}</strong> del pedido.</v-card-text>
+          <v-card-actions class="pa-4">
+            <v-spacer />
+            <v-btn variant="text" @click="confirmarEliminar.mostrar = false">Cancelar</v-btn>
+            <v-btn color="error" variant="flat" @click="ejecutarEliminarLinea">Eliminar</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -293,12 +336,14 @@ const seleccionarPedido = async (orderId: string) => {
 // ----------------------------------------------------------------
 // Estado del EDITOR
 // ----------------------------------------------------------------
-const pedidoOriginal = ref<any>(null);
-const lineasEditadas = ref<any[]>([]);
-const loadingPedido  = ref(false);
-const guardando      = ref(false);
-const modalBusqueda  = ref(false);
-const notificacion   = ref({ show: false, text: '', color: '' });
+const pedidoOriginal   = ref<any>(null);
+const lineasEditadas   = ref<any[]>([]);
+const loadingPedido    = ref(false);
+const guardando        = ref(false);
+const modalBusqueda    = ref(false);
+const notificacion     = ref({ show: false, text: '', color: '' });
+const modalDescuento   = ref({ mostrar: false, nuevoValor: 0, linea: null as any });
+const confirmarEliminar = ref({ mostrar: false, index: -1, descripcion: '' });
 
 const totalNuevo = computed(() =>
   lineasEditadas.value.reduce((acc, l) => acc + (l.PRECIOUNITARIO * l.PRODUCTCOUNT), 0)
@@ -368,12 +413,53 @@ const volver = () => {
   cargarLista();
 };
 
-const eliminarLinea = (index: number) => lineasEditadas.value.splice(index, 1);
+const confirmarEliminarLinea = (index: number) => {
+  confirmarEliminar.value = {
+    mostrar: true,
+    index,
+    descripcion: lineasEditadas.value[index]?.DESCRIPCION || 'artículo',
+  };
+};
+const ejecutarEliminarLinea = () => {
+  lineasEditadas.value.splice(confirmarEliminar.value.index, 1);
+  confirmarEliminar.value.mostrar = false;
+};
 
 const descuentosDeLinea = (linea: any): number[] =>
   [linea.DESCUENTO1, linea.DESCUENTO2, linea.DESCUENTO3, linea.DESCUENTO4]
     .map(Number)
     .filter(d => d > 0);
+
+const calcularPrecioConDescuentos = (linea: any): number => {
+  let p = Number(linea.PRECIOBRUTO || linea.PRECIOUNITARIO);
+  descuentosDeLinea(linea).forEach(d => { p = p * (1 - d / 100); });
+  return p;
+};
+
+const abrirDescuento = (linea: any) => {
+  if (!linea.PRECIOBRUTO) linea.PRECIOBRUTO = linea.PRECIOUNITARIO;
+  modalDescuento.value = { mostrar: true, nuevoValor: 0, linea };
+};
+
+const agregarDescuento = () => {
+  const val = modalDescuento.value.nuevoValor;
+  if (!val || val <= 0 || val >= 100) return;
+  const l = modalDescuento.value.linea;
+  const campos = ['DESCUENTO1', 'DESCUENTO2', 'DESCUENTO3', 'DESCUENTO4'] as const;
+  const libre = campos.find(c => !Number(l[c]));
+  if (!libre) { lanzarNotificacion('Máximo 4 descuentos por línea', 'warning'); return; }
+  l[libre] = val;
+  l.PRECIOUNITARIO = calcularPrecioConDescuentos(l);
+  modalDescuento.value.nuevoValor = 0;
+};
+
+const quitarDescuento = (linea: any, idx: number) => {
+  const campos = ['DESCUENTO1', 'DESCUENTO2', 'DESCUENTO3', 'DESCUENTO4'] as const;
+  const vals = campos.map(c => Number(linea[c])).filter(v => v > 0);
+  vals.splice(idx, 1);
+  campos.forEach((c, i) => { linea[c] = vals[i] || 0; });
+  linea.PRECIOUNITARIO = calcularPrecioConDescuentos(linea);
+};
 
 const getColorEstatus = (status: string) => {
   const s = (status || '').toUpperCase();
