@@ -350,31 +350,125 @@ const exportarCatalogoSegmentos = async () => {
 
     const logoBuffer = await fetch(logoEmpresaUrl).then(r => r.arrayBuffer());
     const FORMATO_DOLAR = '"$"#,##0.00';
-    const FILA_INICIO = 6;
+    const FILA_HEADER  = 6;  // fila de encabezados de columna
+    const FILA_SUB     = 7;  // fila con sub-etiquetas (Pedido / Total)
+    const FILA_INICIO  = 8;  // primera fila de datos
+    const NCOLS        = 10; // A-J
+    const COLOR_HEADER = '1F4E79'; // azul oscuro
+    const COLOR_SUB    = '2E75B6'; // azul medio
+    const COLOR_TEXTO  = 'FFFFFF';
+    const fecha = new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const wb = new ExcelJS.Workbook();
 
-    // Una hoja por porcentaje de descuento D1
+    // columnas: REF | DESC | P.ACTIVO | PROVEEDOR | MARCA | SECCION | PRECIO | STOCK | CANTIDAD | SUBTOTAL
+    const COL_PRECIO    = 7;
+    const COL_STOCK     = 8;
+    const COL_CANTIDAD  = 9;
+    const COL_SUBTOTAL  = 10;
+
+    const colWidths = [12, 50, 28, 32, 18, 22, 13, 10, 12, 14];
+    const colHeaders = (dto: number) => [
+      'REFERENCIA', 'DESCRIPCION', 'PRINCIPIO ACTIVO', 'PROVEEDOR',
+      'MARCA', 'SECCION',
+      dto === 0 ? 'PRECIO ($)' : `PRECIO -${dto}% ($)`,
+      'STOCK', 'CANTIDAD', 'SUBTOTAL',
+    ];
+
+    const aplicarEstiloCelda = (cell: ExcelJS.Cell, bg: string, bold = true, size = 9) => {
+      cell.font = { bold, color: { argb: COLOR_TEXTO }, size };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFFFFF' } },
+        left: { style: 'thin', color: { argb: 'FFFFFF' } },
+        bottom: { style: 'thin', color: { argb: 'FFFFFF' } },
+        right: { style: 'thin', color: { argb: 'FFFFFF' } },
+      };
+    };
+
     descuentos.forEach(dto => {
       const factor = 1 - dto / 100;
       const ws = wb.addWorksheet(dto === 0 ? 'Sin descuento' : `Dto ${dto}%`);
-      ws.columns = [{ width: 15 }, { width: 50 }, { width: 30 }, { width: 20 }, { width: 20 }, { width: 13 }, { width: 10 }, { width: 12 }, { width: 13 }];
+      ws.columns = colWidths.map(w => ({ width: w }));
 
+      // --- Imagen (filas 1-4) ---
       const imageId = wb.addImage({ buffer: logoBuffer, extension: 'png' });
-      ws.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 180, height: 50 } });
+      ws.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 200, height: 60 } });
 
-      const headerRow = ws.getRow(FILA_INICIO - 1);
-      headerRow.values = ['REFERENCIA', 'DESCRIPCION', 'PRINCIPIO ACTIVO', 'MARCA', 'SECCION', dto === 0 ? 'PRECIO ($)' : `PRECIO -${dto}% ($)`, 'STOCK', 'CANTIDAD', 'SUBTOTAL'];
-      headerRow.font = { bold: true };
+      // --- Fila de título empresa (fila 2, columnas E-J) ---
+      ws.mergeCells(2, 4, 2, NCOLS);
+      const titleCell = ws.getCell(2, 4);
+      titleCell.value = 'DROGUERIA INTERCONTINENTAL';
+      titleCell.font = { bold: true, size: 14, color: { argb: COLOR_HEADER } };
+      titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+      ws.getRow(2).height = 22;
 
+      // --- Fila de segmento + fecha (fila 3, columnas E-J) ---
+      ws.mergeCells(3, 4, 3, NCOLS);
+      const subTitleCell = ws.getCell(3, 4);
+      subTitleCell.value = dto === 0 ? `Lista de precios — ${fecha}` : `Descuento ${dto}% — ${fecha}`;
+      subTitleCell.font = { italic: true, size: 10, color: { argb: '555555' } };
+      subTitleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+      ws.getRow(3).height = 16;
+
+      // --- Fila de encabezados (fila FILA_HEADER) ---
+      ws.getRow(FILA_HEADER).height = 30;
+      const headers = colHeaders(dto);
+      headers.forEach((h, idx) => {
+        const cell = ws.getCell(FILA_HEADER, idx + 1);
+        cell.value = h;
+        aplicarEstiloCelda(cell, COLOR_HEADER, true, 9);
+      });
+
+      // --- Fila sub-etiqueta (fila FILA_SUB) ---
+      ws.getRow(FILA_SUB).height = 16;
+      for (let c = 1; c <= NCOLS; c++) {
+        let label = '';
+        if (c === COL_CANTIDAD) label = 'Pedido';
+        if (c === COL_SUBTOTAL) label = 'Total';
+        const cell = ws.getCell(FILA_SUB, c);
+        cell.value = label;
+        aplicarEstiloCelda(cell, COLOR_SUB, false, 8);
+      }
+
+      // --- AutoFilter en fila de encabezados ---
+      ws.autoFilter = { from: { row: FILA_HEADER, column: 1 }, to: { row: FILA_HEADER, column: NCOLS } };
+
+      // --- Filas de datos ---
       productos.forEach((p, i) => {
         const rowNum = FILA_INICIO + i;
         const row = ws.getRow(rowNum);
         const precioConDto = Number(p.PRECIO_BASE) * factor;
-        row.values = [p.REFPROVEEDOR, p.DESCRIPCION, p.PRINCIPIOACTIVO ?? '', p.MARCA ?? '', p.SECCION ?? '', precioConDto, p.STOCK_DISP ?? 0, 0];
-        row.getCell(6).numFmt = FORMATO_DOLAR;
-        row.getCell(9).value = { formula: `F${rowNum}*H${rowNum}` };
-        row.getCell(9).numFmt = FORMATO_DOLAR;
+
+        row.values = [
+          p.REFPROVEEDOR,
+          p.DESCRIPCION,
+          p.PRINCIPIOACTIVO ?? '',
+          p.PROVEEDOR ?? '',
+          p.MARCA ?? '',
+          p.SECCION ?? '',
+          precioConDto,
+          p.STOCK_DISP ?? 0,
+          0,
+          '',
+        ];
+
+        row.getCell(COL_PRECIO).numFmt   = FORMATO_DOLAR;
+        row.getCell(COL_CANTIDAD).numFmt = '#,##0';
+        row.getCell(COL_SUBTOTAL).value  = { formula: `G${rowNum}*I${rowNum}` };
+        row.getCell(COL_SUBTOTAL).numFmt = FORMATO_DOLAR;
+
+        // Zebra suave
+        if (i % 2 === 1) {
+          for (let c = 1; c <= NCOLS; c++) {
+            const cell = row.getCell(c);
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'DDEEFF' } };
+          }
+        }
       });
+
+      // --- Congelar encabezados ---
+      ws.views = [{ state: 'frozen', xSplit: 0, ySplit: FILA_INICIO - 1, topLeftCell: `A${FILA_INICIO}` }];
     });
 
     const buffer = await wb.xlsx.writeBuffer();
@@ -382,7 +476,7 @@ const exportarCatalogoSegmentos = async () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Catalogo_Descuentos_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    link.download = `Drogueria_Intercontinental_${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
