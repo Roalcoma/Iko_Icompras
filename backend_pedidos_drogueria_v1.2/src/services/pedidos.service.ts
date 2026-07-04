@@ -10,6 +10,7 @@ const TRANSICIONES_PERMITIDAS: Record<string, string[]> = {
     'PENDIENTE':                  ['PENDIENTE POR AUTORIZACION', 'AUTORIZADO', 'CANCELADO'],
     'PENDIENTE POR AUTORIZACION': ['AUTORIZADO', 'CANCELADO'],
     'AUTORIZADO':                 ['EMPACADO', 'CANCELADO'],
+    'OK':                         ['CANCELADO'],
     'EMPACADO':                   ['FINALIZADO'],
     // 'APROBACION PSICOTROPICOS' deliberadamente sin entrada: no debe poder cambiarse
     // desde el dropdown normal de estatus, solo vía aprobarPsicotropico().
