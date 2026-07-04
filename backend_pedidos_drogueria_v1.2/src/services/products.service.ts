@@ -185,7 +185,7 @@ export class ProductsService {
                     ISNULL(ACL.PRINCIPIOACTIVO, '') AS PRINCIPIOACTIVO,
                     ISNULL(M.DESCRIPCION, '') AS MARCA,
                     ISNULL(S.DESCRIPCION, '') AS SECCION,
-                    '' AS PROVEEDOR,
+                    ISNULL(PR.NOMPROVEEDOR, '') AS PROVEEDOR,
                     PV.PNETO AS PRECIO_BASE,
                     ${STOCK_DISPONIBLE_SQL} AS STOCK_DISP
                 FROM ARTICULOS A WITH(NOLOCK)
@@ -194,6 +194,7 @@ export class ProductsService {
                         AND PV.IDTARIFAV = @TARIFA
                     LEFT JOIN MARCA M WITH(NOLOCK) ON M.CODMARCA = A.MARCA
                     LEFT JOIN SECCIONES S WITH(NOLOCK) ON S.NUMDPTO = A.DPTO AND S.NUMSECCION = A.SECCION
+                    LEFT JOIN PROVEEDORES PR WITH(NOLOCK) ON PR.CODPROVEEDOR = ACL.CODPROVEEDORICG
                 WHERE A.TIPOARTICULO = 'A'
                     AND A.DESCATALOGADO = 'F'
                     AND ISNULL(A.NODTOAPLICABLE, 0) <> 1
