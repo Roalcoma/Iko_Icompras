@@ -27,6 +27,14 @@ export class PedidosServices {
                 ALTER TABLE ${esquema}.CABECERA_PED ADD OBSERVACIONES NVARCHAR(255) NULL
             `);
             await pool.request().query(`
+                IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='LINEA_PED' AND COLUMN_NAME='PORCENTAJEIVA')
+                ALTER TABLE ${esquema}.LINEA_PED ADD PORCENTAJEIVA FLOAT NULL
+            `);
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='LINEA_PED' AND COLUMN_NAME='MONTOIVA')
+                ALTER TABLE ${esquema}.LINEA_PED ADD MONTOIVA FLOAT NULL
+            `);
+            await pool.request().query(`
                 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='APP_PEDIDO_SEQ')
                     CREATE TABLE ${esquema}.APP_PEDIDO_SEQ (ULTIMO_ID INT NOT NULL DEFAULT 0)
             `);
@@ -186,15 +194,17 @@ export class PedidosServices {
             tablaLineas.columns.add('DESCUENTO3', mssql.Float, { nullable: true });
             tablaLineas.columns.add('DESCUENTO4', mssql.Float, { nullable: true });
             tablaLineas.columns.add('PRECIOBRUTO', mssql.Float, { nullable: true });
+            tablaLineas.columns.add('PORCENTAJEIVA', mssql.Float, { nullable: true });
+            tablaLineas.columns.add('MONTOIVA', mssql.Float, { nullable: true });
 
             // 3. LLENAR LA TABLA
             for (let i = 0; i < lineas.length; i++) {
                 const {
                     codarticulo, idtarifav, cantidad, precio,
-                    DESCUENTO1, DESCUENTO2, DESCUENTO3, DESCUENTO4, PRECIOBRUTO
+                    DESCUENTO1, DESCUENTO2, DESCUENTO3, DESCUENTO4, PRECIOBRUTO,
+                    PORCENTAJEIVA, MONTOIVA
                 } = lineas[i];
 
-                // Buscamos la referencia en nuestro mapa, si no existe usamos vacío
                 const referenciaReal = mapaReferencias[codarticulo] || '';
 
                 tablaLineas.rows.add(
@@ -209,7 +219,9 @@ export class PedidosServices {
                     DESCUENTO2 || 0,
                     DESCUENTO3 || 0,
                     DESCUENTO4 || 0,
-                    PRECIOBRUTO || precio
+                    PRECIOBRUTO || precio,
+                    PORCENTAJEIVA || 0,
+                    MONTOIVA || 0
                 );
             }
 
@@ -371,7 +383,9 @@ export class PedidosServices {
                         ISNULL(LP.DESCUENTO4, 0) AS DESCUENTO4,
                         LP.TOTALLINEA,
                         ISNULL(PCL.DIASPROTECCION, 0) AS DIASPROTECCION,
-                        ISNULL(ARTICULOS.NODTOAPLICABLE, 0) AS NODTOAPLICABLE
+                        ISNULL(ARTICULOS.NODTOAPLICABLE, 0) AS NODTOAPLICABLE,
+                        ISNULL(LP.PORCENTAJEIVA, 0) AS PORCENTAJEIVA,
+                        ISNULL(LP.MONTOIVA, 0) AS MONTOIVA
                     FROM
                         ${esquema}.LINEA_PED LP
                         INNER JOIN ARTICULOS ON LP.CODARTICULO = ARTICULOS.CODARTICULO

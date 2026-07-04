@@ -12,6 +12,7 @@ export interface LineaPDF {
     sinDescuento?: boolean;
     esControlado?: boolean;
     diasProteccion?: number;
+    porcentajeIva?: number;
 }
 
 export interface PedidoPDFData {
@@ -27,6 +28,7 @@ export interface PedidoPDFData {
     };
     lineas: LineaPDF[];
     totalUSD: number;
+    totalIVA?: number;
     ocultarPrecios?: boolean;
     firmante?: { usuario: string; fecha: string };
 }
@@ -109,6 +111,9 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
 
     const filas = data.lineas.map(l => {
         const descPct = (!sinPrecios && !l.sinDescuento && l.descuentos?.length) ? `${l.descuentos.join('%+')}%` : '';
+        const pct     = l.porcentajeIva ?? 0;
+        const precioConIva = l.precioUnitario * (1 + pct / 100);
+        const ivaTag  = (!sinPrecios && pct > 0) ? `${pct}%` : '';
         const row: any[] = [
             l.codigo,
             (l.descripcion || '') + (l.esControlado ? ' (CONTROLADO)' : ''),
@@ -118,15 +123,16 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
             descPct,
         ];
         if (!sinPrecios) {
-            row.push(l.precioUnitario.toFixed(2));
-            row.push((l.precioUnitario * l.cantidad).toFixed(2));
+            row.push(ivaTag);
+            row.push(precioConIva.toFixed(2));
+            row.push((precioConIva * l.cantidad).toFixed(2));
         }
         return row;
     });
 
     const headCols = sinPrecios
         ? ['Código', 'Descripción', 'Cant.', 'Seg.', 'ESC PRD', 'ESC PRD', 'ESC PRV', 'DESC.']
-        : ['Código', 'Descripción', 'Cant.', 'Seg.', 'ESC PRD', 'ESC PRD', 'ESC PRV', 'DESC.', 'Precio', 'Importe'];
+        : ['Código', 'Descripción', 'Cant.', 'Seg.', 'ESC PRD', 'ESC PRD', 'ESC PRV', 'DESC.', 'IVA', 'Precio', 'Importe'];
 
     autoTable(doc, {
         startY: datosFin + 5,
@@ -137,29 +143,47 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
         headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1 },
         columnStyles: {
             0: { cellWidth: 18 },
-            1: { cellWidth: sinPrecios ? 80 : 52 },
-            ...(sinPrecios ? {} : { 8: { halign: 'right' as const }, 9: { halign: 'right' as const } }),
+            1: { cellWidth: sinPrecios ? 80 : 48 },
+            ...(sinPrecios ? {} : {
+                8:  { cellWidth: 10, halign: 'center' as const },
+                9:  { halign: 'right' as const },
+                10: { halign: 'right' as const },
+            }),
         },
     });
 
     // --- Totales (solo con precios) ---
     const finalY = (doc as any).lastAutoTable.finalY + 6;
     if (!sinPrecios) {
+        const totalIVA  = data.totalIVA ?? data.lineas.reduce((s, l) => {
+            const pct = l.porcentajeIva ?? 0;
+            return s + l.precioUnitario * l.cantidad * (pct / 100);
+        }, 0);
+        const totalConIVA = data.totalUSD + totalIVA;
+
         doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
         doc.rect(50, finalY, 146, 6);
-        doc.text('Monto Total de la Base Imponible según Alícuota: USD:', 86, finalY + 4.5);
+        doc.text('Base Imponible: USD:', 130, finalY + 4.5);
         doc.text(data.totalUSD.toFixed(2), 192, finalY + 4.5, { align: 'right' });
 
+        if (totalIVA > 0) {
+            doc.rect(50, finalY + 7, 146, 6);
+            doc.text('IVA: USD:', 150, finalY + 11.5);
+            doc.text(totalIVA.toFixed(2), 192, finalY + 11.5, { align: 'right' });
+        }
+
+        const totalY = totalIVA > 0 ? finalY + 18 : finalY + 11;
         doc.setFont('helvetica', 'bold');
-        doc.rect(50, finalY + 12, 146, 8);
-        doc.text('VALOR TOTAL:    USD:', 132, finalY + 17.5);
-        doc.text(data.totalUSD.toFixed(2), 192, finalY + 17.5, { align: 'right' });
+        doc.rect(50, totalY, 146, 8);
+        doc.text('VALOR TOTAL (c/IVA):    USD:', 120, totalY + 5.5);
+        doc.text(totalConIVA.toFixed(2), 192, totalY + 5.5, { align: 'right' });
     }
 
     // --- Firmante (opcional) ---
     const pageH = doc.internal.pageSize.getHeight();
     if (data.firmante) {
-        const firmaY = sinPrecios ? finalY + 10 : finalY + 30;
+        const firmaY = sinPrecios ? finalY + 10 : finalY + 38;
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
         doc.setDrawColor(180);

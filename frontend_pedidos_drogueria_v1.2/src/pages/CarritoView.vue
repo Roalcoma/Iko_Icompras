@@ -70,11 +70,14 @@
                   <div v-if="item.descuentos?.length" class="text-caption text-grey text-decoration-line-through">
                     $ {{ obtenerPrecioBase(item).toFixed(2) }}
                   </div>
-                  <MontoDisplay :usd="calcularPrecioConDescuento(item)" :tasa="carritoStore.tasa" main-class="font-weight-bold text-on-surface" align-end />
+                  <MontoDisplay :usd="precioConIVA(item)" :tasa="carritoStore.tasa" main-class="font-weight-bold text-on-surface" align-end />
+                  <div v-if="Number(item.PORCENTAJEIVA) > 0" class="text-caption text-blue-darken-2">
+                    IVA {{ item.PORCENTAJEIVA }}% incl.
+                  </div>
                 </td>
 
                 <td class="text-right font-weight-bold text-success">
-                  <MontoDisplay :usd="calcularPrecioConDescuento(item) * item.cantidad" :tasa="carritoStore.tasa" main-class="font-weight-bold text-success" align-end />
+                  <MontoDisplay :usd="precioConIVA(item) * item.cantidad" :tasa="carritoStore.tasa" main-class="font-weight-bold text-success" align-end />
                 </td>
 
                 <td class="text-center">
@@ -103,7 +106,15 @@
             <v-divider class="mb-4"></v-divider>
 
             <div class="d-flex justify-space-between mb-2 align-center">
-              <span class="text-grey-darken-1 font-weight-bold">SUBTOTAL USD:</span>
+              <span class="text-grey-darken-1 font-weight-bold">BASE IMPONIBLE:</span>
+              <span class="font-weight-bold">$ {{ totalNetoUSD.toFixed(2) }}</span>
+            </div>
+            <div v-if="totalIVAUSD > 0" class="d-flex justify-space-between mb-2 align-center">
+              <span class="text-blue-darken-2 font-weight-bold">IVA:</span>
+              <span class="text-blue-darken-2 font-weight-bold">$ {{ totalIVAUSD.toFixed(2) }}</span>
+            </div>
+            <div class="d-flex justify-space-between mb-2 align-center">
+              <span class="text-grey-darken-1 font-weight-bold">TOTAL USD:</span>
               <span class="text-h6 font-weight-bold">$ {{ totalUSD.toFixed(2) }}</span>
             </div>
 
@@ -218,6 +229,18 @@ const calcularPrecioConDescuento = (item: any): number => {
   return precio;
 };
 
+// Precio neto (con descuentos) + IVA — lo que ve el cliente
+const precioConIVA = (item: any): number => {
+  const neto = calcularPrecioConDescuento(item);
+  const pct  = Number(item.PORCENTAJEIVA ?? 0);
+  return neto * (1 + pct / 100);
+};
+
+const montoIVALinea = (item: any): number => {
+  const neto = calcularPrecioConDescuento(item);
+  return neto * item.cantidad * (Number(item.PORCENTAJEIVA ?? 0) / 100);
+};
+
 const getStockDisponible = (item: any) => item.stocks?.reduce((t: number, s: any) => t + s.STOCK, 0) || 0;
 
 const actualizarCantidad = (item: any, cambio: number) => {
@@ -271,8 +294,10 @@ const agregarDescuento = () => {
 
 const eliminarDescuento = (item: any, index: number) => item.descuentos.splice(index, 1);
 
-const totalUSD = computed(() => carritoStore.articulos.reduce((acc, item) => acc + (calcularPrecioConDescuento(item) * item.cantidad), 0));
-const totalBS = computed(() => totalUSD.value * carritoStore.tasa);
+const totalNetoUSD = computed(() => carritoStore.articulos.reduce((acc, item) => acc + calcularPrecioConDescuento(item) * item.cantidad, 0));
+const totalIVAUSD  = computed(() => carritoStore.articulos.reduce((acc, item) => acc + montoIVALinea(item), 0));
+const totalUSD     = computed(() => totalNetoUSD.value + totalIVAUSD.value);
+const totalBS      = computed(() => totalUSD.value * carritoStore.tasa);
 
 const eliminarDelCarrito = (cod: any) => {
   const i = carritoStore.articulos.findIndex(a => a.CODARTICULO === cod);
@@ -315,8 +340,12 @@ const exportarPDF = async (ordenId?: string) => {
       precioUnitario: calcularPrecioConDescuento(item),
       descuentos: item.descuentos,
       esControlado: item.ES_PSICOTROPICO === 'T',
+      porcentajeIva: Number(item.PORCENTAJEIVA ?? 0),
+      diasProteccion: Number(item.DIASPROTECCION ?? 0),
+      sinDescuento: !!(item.NODTOAPLICABLE === true || item.NODTOAPLICABLE === 1),
     })),
-    totalUSD: totalUSD.value,
+    totalUSD: totalNetoUSD.value,
+    totalIVA: totalIVAUSD.value,
   });
 };
 
@@ -339,19 +368,25 @@ const procesarVenta = async () => {
     !(Number(art.DIASPROTECCION ?? 0) > 0)
   );
 
-  const mapearLineas = (items: any[]) => items.map(art => ({
-    codarticulo:  parseInt(String(art.CODARTICULO)),
-    referencia:   art.REFPROVEEDOR || '',
-    codalmacen:   'ZAV',
-    idtarifav:    1,
-    cantidad:     art.cantidad,
-    precio:       calcularPrecioConDescuento(art),
-    PRECIOBRUTO:  obtenerPrecioBase(art),
-    DESCUENTO1:   art.descuentos?.[0] || 0,
-    DESCUENTO2:   art.descuentos?.[1] || 0,
-    DESCUENTO3:   art.descuentos?.[2] || 0,
-    DESCUENTO4:   art.descuentos?.[3] || 0,
-  }));
+  const mapearLineas = (items: any[]) => items.map(art => {
+    const precioNeto = calcularPrecioConDescuento(art);
+    const pct        = Number(art.PORCENTAJEIVA ?? 0);
+    return {
+      codarticulo:   parseInt(String(art.CODARTICULO)),
+      referencia:    art.REFPROVEEDOR || '',
+      codalmacen:    'ZAV',
+      idtarifav:     1,
+      cantidad:      art.cantidad,
+      precio:        precioNeto,          // ERP recibe precio neto sin IVA
+      PRECIOBRUTO:   obtenerPrecioBase(art),
+      DESCUENTO1:    art.descuentos?.[0] || 0,
+      DESCUENTO2:    art.descuentos?.[1] || 0,
+      DESCUENTO3:    art.descuentos?.[2] || 0,
+      DESCUENTO4:    art.descuentos?.[3] || 0,
+      PORCENTAJEIVA: pct,
+      MONTOIVA:      precioNeto * art.cantidad * (pct / 100),
+    };
+  });
 
   const num = await reservarNumeroPedido();
   const promesas: Promise<any>[] = [];

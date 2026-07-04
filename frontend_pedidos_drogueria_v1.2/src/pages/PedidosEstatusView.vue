@@ -492,8 +492,10 @@ const imprimirPDF = async (item: any) => {
           .map(Number).filter(d => d > 0),
         sinDescuento: !!l.NODTOAPLICABLE,
         diasProteccion: Number(l.DIASPROTECCION ?? 0),
+        porcentajeIva: Number(l.PORCENTAJEIVA ?? 0),
       })),
-      totalUSD: Number(item.TOTALPRECIO || 0),
+      totalUSD: lineas.reduce((s: number, l: any) => s + Number(l.PRECIOUNITARIO) * Number(l.PRODUCTCOUNT), 0),
+      totalIVA: lineas.reduce((s: number, l: any) => s + Number(l.MONTOIVA ?? 0), 0),
     });
   } catch {
     lanzarNotificacion('Error al generar el PDF', 'error');
