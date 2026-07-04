@@ -194,6 +194,8 @@ export class ProductsService {
                 WHERE A.TIPOARTICULO = 'A'
                     AND A.DESCATALOGADO = 'F'
                     AND ISNULL(A.NODTOAPLICABLE, 0) <> 1
+                    AND A.DPTO = 1
+                    AND UPPER(ISNULL(S.DESCRIPCION, '')) NOT LIKE '%GASTO%'
                 ORDER BY ACL.DESCRIPCIONLARGA
             `);
         return result.recordset;
