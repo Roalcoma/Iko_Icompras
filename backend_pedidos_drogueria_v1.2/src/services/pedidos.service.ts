@@ -657,7 +657,7 @@ export class PedidosServices {
                                     INNER JOIN ${esquema}.LINEA_PED LP2 ON LP2.ORDERID = CP2.ORDERID
                                     WHERE LP2.CODARTICULO = @COD
                                       AND CP2.ORDERID <> @ORDERID_EXCL
-                                      AND CP2.ESTATUS IN ('PENDIENTE POR AUTORIZACION','APROBACION PSICOTROPICOS','AUTORIZADO','EMPACADO')
+                                      AND CP2.ESTATUS IN ('PENDIENTE POR AUTORIZACION','APROBACION PSICOTROPICOS','AUTORIZADO','EMPACADO','OK')
                                 ), 0) AS DISPONIBLE
                         `);
                     const disponible: number = stockRes.recordset[0]?.DISPONIBLE ?? 0;
