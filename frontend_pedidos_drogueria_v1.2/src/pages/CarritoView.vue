@@ -77,9 +77,8 @@
                 </td>
 
                 <td class="text-right">
-                  <div class="text-caption text-grey">$ {{ (calcularPrecioConDescuento(item) * item.cantidad).toFixed(2) }}</div>
-                  <MontoDisplay :usd="precioConIVA(item) * item.cantidad" :tasa="carritoStore.tasa" main-class="font-weight-bold text-success" align-end />
-                  <div v-if="Number(item.PORCENTAJEIVA) > 0" class="text-caption text-blue-darken-2">c/IVA</div>
+                  <MontoDisplay :usd="calcularPrecioConDescuento(item) * item.cantidad" :tasa="carritoStore.tasa" main-class="font-weight-bold text-success" align-end />
+                  <div v-if="Number(item.PORCENTAJEIVA) > 0" class="text-caption text-blue-darken-2">+ IVA {{ item.PORCENTAJEIVA }}%</div>
                 </td>
 
                 <td class="text-center">
@@ -108,16 +107,8 @@
             <v-divider class="mb-4"></v-divider>
 
             <div class="d-flex justify-space-between mb-2 align-center">
-              <span class="text-grey-darken-1 font-weight-bold">BASE IMPONIBLE:</span>
-              <span class="font-weight-bold">$ {{ totalNetoUSD.toFixed(2) }}</span>
-            </div>
-            <div v-if="totalIVAUSD > 0" class="d-flex justify-space-between mb-2 align-center">
-              <span class="text-blue-darken-2 font-weight-bold">IVA:</span>
-              <span class="text-blue-darken-2 font-weight-bold">$ {{ totalIVAUSD.toFixed(2) }}</span>
-            </div>
-            <div class="d-flex justify-space-between mb-2 align-center">
-              <span class="text-grey-darken-1 font-weight-bold">TOTAL USD:</span>
-              <span class="text-h6 font-weight-bold">$ {{ totalUSD.toFixed(2) }}</span>
+              <span class="text-grey-darken-1 font-weight-bold">TOTAL USD (neto):</span>
+              <span class="text-h6 font-weight-bold">$ {{ totalNetoUSD.toFixed(2) }}</span>
             </div>
 
             <div class="pa-4 rounded-lg mb-6 text-center" style="background: #ECFDF5; border: 1px dashed #059669;">
@@ -298,8 +289,8 @@ const eliminarDescuento = (item: any, index: number) => item.descuentos.splice(i
 
 const totalNetoUSD = computed(() => carritoStore.articulos.reduce((acc, item) => acc + calcularPrecioConDescuento(item) * item.cantidad, 0));
 const totalIVAUSD  = computed(() => carritoStore.articulos.reduce((acc, item) => acc + montoIVALinea(item), 0));
-const totalUSD     = computed(() => totalNetoUSD.value + totalIVAUSD.value);
-const totalBS      = computed(() => totalUSD.value * carritoStore.tasa);
+const totalUSD     = computed(() => totalNetoUSD.value);
+const totalBS      = computed(() => totalNetoUSD.value * carritoStore.tasa);
 
 const eliminarDelCarrito = (cod: any) => {
   const i = carritoStore.articulos.findIndex(a => a.CODARTICULO === cod);

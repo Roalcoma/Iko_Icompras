@@ -130,7 +130,7 @@
               <v-icon start>mdi-package-variant</v-icon>
               <span class="font-weight-bold">Artículos en la Orden</span>
               <v-spacer />
-              <v-btn prepend-icon="mdi-plus" size="small" color="success" rounded="pill" @click="modalBusqueda = true">
+              <v-btn prepend-icon="mdi-plus" size="small" color="success" rounded="pill" @click="() => { busquedaProducto = ''; resultadosBusqueda = []; modalBusqueda = true; }">
                 Añadir Producto
               </v-btn>
             </div>
@@ -213,10 +213,45 @@
       </v-row>
 
       <!-- Modal búsqueda de producto -->
-      <v-dialog v-model="modalBusqueda" max-width="800">
+      <v-dialog v-model="modalBusqueda" max-width="860">
         <v-card class="rounded-xl">
-          <v-card-title class="pa-4 bg-primary text-white">Añadir Producto</v-card-title>
-          <v-card-text class="pa-6">Próximamente: Buscador de productos para añadir</v-card-text>
+          <v-card-title class="pa-4 bg-primary text-white d-flex align-center">
+            <v-icon start>mdi-magnify</v-icon> Añadir Producto
+          </v-card-title>
+          <v-card-text class="pa-4">
+            <v-text-field
+              v-model="busquedaProducto"
+              label="Buscar por código o descripción"
+              prepend-inner-icon="mdi-magnify"
+              variant="outlined"
+              density="compact"
+              clearable
+              hide-details
+              class="mb-4"
+              @keyup.enter="buscarProductos"
+            >
+              <template #append-inner>
+                <v-btn size="small" color="primary" variant="flat" :loading="buscandoProducto" @click="buscarProductos">Buscar</v-btn>
+              </template>
+            </v-text-field>
+
+            <v-list v-if="resultadosBusqueda.length" lines="two" border class="rounded-lg" max-height="360" style="overflow-y:auto">
+              <v-list-item
+                v-for="p in resultadosBusqueda"
+                :key="p.CODARTICULO"
+                :title="p.DESCRIPCION"
+                :subtitle="`Cód: ${p.CODARTICULO} | Stock: ${p.STOCK ?? 0}`"
+              >
+                <template #append>
+                  <div class="d-flex align-center" style="gap:8px">
+                    <span class="text-subtitle-2 font-weight-bold text-success">$ {{ Number(p.PRECIO ?? 0).toFixed(2) }}</span>
+                    <v-btn size="small" color="primary" variant="flat" icon="mdi-plus" :loading="agregandoProducto === p.CODARTICULO" @click="seleccionarProducto(p)" />
+                  </div>
+                </template>
+              </v-list-item>
+            </v-list>
+            <div v-else-if="!buscandoProducto && busquedaProducto" class="text-center text-grey pa-4">Sin resultados</div>
+          </v-card-text>
           <v-card-actions>
             <v-spacer />
             <v-btn variant="text" @click="modalBusqueda = false">Cerrar</v-btn>
@@ -340,7 +375,11 @@ const pedidoOriginal   = ref<any>(null);
 const lineasEditadas   = ref<any[]>([]);
 const loadingPedido    = ref(false);
 const guardando        = ref(false);
-const modalBusqueda    = ref(false);
+const modalBusqueda        = ref(false);
+const busquedaProducto     = ref('');
+const resultadosBusqueda   = ref<any[]>([]);
+const buscandoProducto     = ref(false);
+const agregandoProducto    = ref('');
 const notificacion     = ref({ show: false, text: '', color: '' });
 const modalDescuento   = ref({ mostrar: false, nuevoValor: 0, linea: null as any });
 const confirmarEliminar = ref({ mostrar: false, index: -1, descripcion: '' });
@@ -472,6 +511,51 @@ const getColorEstatus = (status: string) => {
 
 const formatearFecha = (f: string) => f ? new Date(f).toLocaleDateString('es-PY') : '-';
 const lanzarNotificacion = (text: string, color: string) => notificacion.value = { show: true, text, color };
+
+const buscarProductos = async () => {
+  if (!busquedaProducto.value?.trim()) return;
+  buscandoProducto.value = true;
+  resultadosBusqueda.value = [];
+  try {
+    const res = await axios.get(`${API}/products/get-products`, { params: { articulo: busquedaProducto.value.trim() } });
+    resultadosBusqueda.value = res.data.data ?? res.data ?? [];
+  } catch {
+    lanzarNotificacion('Error al buscar productos', 'error');
+  } finally {
+    buscandoProducto.value = false;
+  }
+};
+
+const seleccionarProducto = async (producto: any) => {
+  agregandoProducto.value = producto.CODARTICULO;
+  try {
+    const tarifa = lineasEditadas.value[0]?.IDTARIFAV || 1;
+    const res = await axios.get(`${API}/products/get-prices`, { params: { codarticulo: producto.CODARTICULO, tarifa } });
+    const precio = res.data.data?.[0]?.PNETO ?? res.data?.[0]?.PNETO ?? 0;
+    const yaExiste = lineasEditadas.value.find(l => l.CODARTICULO === producto.CODARTICULO);
+    if (yaExiste) {
+      yaExiste.PRODUCTCOUNT += 1;
+    } else {
+      lineasEditadas.value.push({
+        CODARTICULO:    producto.CODARTICULO,
+        REFERENCIA:     producto.REFERENCIA   || '',
+        DESCRIPCION:    producto.DESCRIPCION  || '',
+        CODALMACEN:     lineasEditadas.value[0]?.CODALMACEN || 'ZAV',
+        IDTARIFAV:      tarifa,
+        PRECIOBRUTO:    precio,
+        PRECIOUNITARIO: precio,
+        PRODUCTCOUNT:   1,
+        DESCUENTO1: 0, DESCUENTO2: 0, DESCUENTO3: 0, DESCUENTO4: 0,
+      });
+    }
+    lanzarNotificacion(`${producto.DESCRIPCION} añadido`, 'success');
+    modalBusqueda.value = false;
+  } catch {
+    lanzarNotificacion('Error al obtener precio del producto', 'error');
+  } finally {
+    agregandoProducto.value = '';
+  }
+};
 
 // ----------------------------------------------------------------
 // Inicio

@@ -112,8 +112,7 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
     const filas = data.lineas.map(l => {
         const descPct = (!sinPrecios && !l.sinDescuento && l.descuentos?.length) ? `${l.descuentos.join('%+')}%` : '';
         const pct     = l.porcentajeIva ?? 0;
-        const precioConIva = l.precioUnitario * (1 + pct / 100);
-        const ivaTag  = (!sinPrecios && pct > 0) ? `${pct}%` : '';
+        const ivaTag  = (!sinPrecios && pct > 0) ? `+${pct}%` : '';
         const row: any[] = [
             l.codigo,
             (l.descripcion || '') + (l.esControlado ? ' (CONTROLADO)' : ''),
@@ -124,8 +123,8 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
         ];
         if (!sinPrecios) {
             row.push(ivaTag);
-            row.push(precioConIva.toFixed(2));
-            row.push((precioConIva * l.cantidad).toFixed(2));
+            row.push(l.precioUnitario.toFixed(2));
+            row.push((l.precioUnitario * l.cantidad).toFixed(2));
         }
         return row;
     });
@@ -155,29 +154,11 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
     // --- Totales (solo con precios) ---
     const finalY = (doc as any).lastAutoTable.finalY + 6;
     if (!sinPrecios) {
-        const totalIVA  = data.totalIVA ?? data.lineas.reduce((s, l) => {
-            const pct = l.porcentajeIva ?? 0;
-            return s + l.precioUnitario * l.cantidad * (pct / 100);
-        }, 0);
-        const totalConIVA = data.totalUSD + totalIVA;
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        doc.rect(50, finalY, 146, 6);
-        doc.text('Base Imponible: USD:', 130, finalY + 4.5);
-        doc.text(data.totalUSD.toFixed(2), 192, finalY + 4.5, { align: 'right' });
-
-        if (totalIVA > 0) {
-            doc.rect(50, finalY + 7, 146, 6);
-            doc.text('IVA: USD:', 150, finalY + 11.5);
-            doc.text(totalIVA.toFixed(2), 192, finalY + 11.5, { align: 'right' });
-        }
-
-        const totalY = totalIVA > 0 ? finalY + 18 : finalY + 11;
         doc.setFont('helvetica', 'bold');
-        doc.rect(50, totalY, 146, 8);
-        doc.text('VALOR TOTAL (c/IVA):    USD:', 120, totalY + 5.5);
-        doc.text(totalConIVA.toFixed(2), 192, totalY + 5.5, { align: 'right' });
+        doc.setFontSize(8);
+        doc.rect(50, finalY, 146, 8);
+        doc.text('TOTAL NETO:    USD:', 130, finalY + 5.5);
+        doc.text(data.totalUSD.toFixed(2), 192, finalY + 5.5, { align: 'right' });
     }
 
     // --- Firmante (opcional) ---

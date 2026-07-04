@@ -438,8 +438,7 @@ const calcularPrecioFinalDolar = (item: any): number => {
   let p = obtenerPrecioDolar(item);
   const dc  = Number(carritoStore.clienteSeleccionado?.DESCUENTO) || 0;
   if (dc > 0) p -= (p * (dc / 100));
-  const iva = Number(item.PORCENTAJEIVA ?? 0);
-  return p * (1 + iva / 100);
+  return p;
 };
 const getStockTotal = (p: any) => p.stocks?.reduce((t: number, s: any) => t + s.STOCK, 0) || 0;
 const lanzarAviso = (texto: string, color: string) => aviso.value = { mostrar: true, texto, color };
