@@ -5,16 +5,18 @@ export class RuteroService {
     static async getZonas(): Promise<{ zona: string; display: string }[]> {
         const pool = await connectDb();
         const result = await pool.request().query(`
-            SELECT DISTINCT
+            SELECT
                 CLC.ZONA,
                 CASE
-                    WHEN R.RUTA   IS NOT NULL THEN CLC.ZONA + ' - ' + R.RUTA
-                    WHEN R.NOMBRE IS NOT NULL THEN CLC.ZONA + ' - ' + R.NOMBRE
+                    WHEN MIN(ISNULL(R.RUTA, '')) <> '' THEN CLC.ZONA + ' - ' + MIN(R.RUTA)
+                    WHEN MIN(ISNULL(R.NOMBRE, '')) <> '' THEN CLC.ZONA + ' - ' + MIN(R.NOMBRE)
                     ELSE CLC.ZONA
                 END AS DISPLAY
-            FROM CLIENTESCAMPOSLIBRES CLC
-            LEFT JOIN RUTAS R WITH(NOLOCK) ON CAST(R.CODRUTA AS NVARCHAR(50)) = LTRIM(RTRIM(CLC.ZONA))
+            FROM CLIENTESCAMPOSLIBRES CLC WITH(NOLOCK)
+            INNER JOIN CLIENTES CL WITH(NOLOCK) ON CL.CODCLIENTE = CLC.CODCLIENTE
+            LEFT JOIN RUTAS R WITH(NOLOCK) ON R.CODRUTA = CL.CODRUTA
             WHERE CLC.ZONA IS NOT NULL AND LTRIM(RTRIM(CLC.ZONA)) <> ''
+            GROUP BY CLC.ZONA
             ORDER BY CLC.ZONA
         `);
         return result.recordset.map((r: any) => ({ zona: r.ZONA, display: r.DISPLAY }));
