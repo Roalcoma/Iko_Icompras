@@ -16,6 +16,7 @@ import { PromocionesService } from "./services/promociones.service";
 import { PedidosServices }    from "./services/pedidos.service";
 import { ReclamosService }    from "./services/reclamos.service";
 import { EcommerceService }   from "./services/ecommerce.service";
+import { RuteroService }      from "./services/rutero.service";
 import { dbModeMiddleware } from "./db/dbMode.middleware";
 
 // Evitar que errores no capturados tumben el proceso
@@ -63,6 +64,7 @@ app.listen(port, async () => {
     await PedidosServices.initTablas();
     await ReclamosService.initTablas();
     await EcommerceService.initTablas();
+    await RuteroService.initTablas();
     // Cron: escanear carpeta ecommerce cada 60 segundos
     setInterval(() => EcommerceService.escanearCarpeta().catch(console.error), 60_000);
 });

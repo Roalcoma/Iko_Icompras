@@ -4,8 +4,12 @@ import { authMiddleware } from '../middleware/auth.middleware';
 
 const ruteroRouter = Router();
 
-ruteroRouter.get('/zonas',            authMiddleware, RuteroController.getZonas);
-ruteroRouter.get('/facturas',         authMiddleware, RuteroController.getFacturas);
-ruteroRouter.put('/marcar-entregado', authMiddleware, RuteroController.marcarEntregado);
+ruteroRouter.get('/zonas',                     authMiddleware, RuteroController.getZonas);
+ruteroRouter.get('/facturas',                  authMiddleware, RuteroController.getFacturas);
+ruteroRouter.post('/crear',                    authMiddleware, RuteroController.crearRutero);
+ruteroRouter.get('/ruteros',                   authMiddleware, RuteroController.getRuteros);
+ruteroRouter.get('/ruteros/:id/facturas',      authMiddleware, RuteroController.getFacturasDeRutero);
+ruteroRouter.put('/ruteros/:id/confirmar',     authMiddleware, RuteroController.confirmarRutero);
+ruteroRouter.put('/confirmar-factura',         authMiddleware, RuteroController.confirmarFacturaRutero);
 
 export default ruteroRouter;

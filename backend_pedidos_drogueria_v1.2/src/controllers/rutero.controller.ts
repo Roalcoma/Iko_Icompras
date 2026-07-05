@@ -23,14 +23,59 @@ export class RuteroController {
         }
     }
 
-    static async marcarEntregado(req: Request, res: Response): Promise<void> {
-        const { numserie, numfactura, n } = req.body;
-        if (!numserie || !numfactura) { res.status(400).json({ success: false, message: 'numserie y numfactura requeridos' }); return; }
+    static async crearRutero(req: Request, res: Response): Promise<void> {
+        const { codruta, nombreRuta, facturas } = req.body;
+        if (!codruta || !Array.isArray(facturas) || !facturas.length) {
+            res.status(400).json({ success: false, message: 'codruta y facturas requeridos' }); return;
+        }
         try {
-            await RuteroService.marcarEntregado(String(numserie), Number(numfactura), Number(n ?? 1));
-            res.json({ success: true, message: 'Factura marcada como entregada' });
+            const result = await RuteroService.crearRutero(Number(codruta), String(nombreRuta ?? ''), facturas);
+            res.json({ success: true, data: result });
         } catch (error) {
-            res.status(500).json({ success: false, message: 'Error al marcar entrega', error: error instanceof Error ? error.message : String(error) });
+            res.status(500).json({ success: false, message: 'Error al crear rutero', error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
+    static async getRuteros(req: Request, res: Response): Promise<void> {
+        const codruta = req.query.codruta ? Number(req.query.codruta) : undefined;
+        try {
+            const data = await RuteroService.getRuteros(codruta);
+            res.json({ success: true, data });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al obtener ruteros', error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
+    static async getFacturasDeRutero(req: Request, res: Response): Promise<void> {
+        const id = Number(req.params.id);
+        try {
+            const data = await RuteroService.getFacturasDeRutero(id);
+            res.json({ success: true, data });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al obtener facturas del rutero', error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
+    static async confirmarFacturaRutero(req: Request, res: Response): Promise<void> {
+        const { idrutero, numserie, numfactura } = req.body;
+        if (!idrutero || !numserie || !numfactura) {
+            res.status(400).json({ success: false, message: 'idrutero, numserie y numfactura requeridos' }); return;
+        }
+        try {
+            await RuteroService.confirmarFacturaRutero(Number(idrutero), String(numserie), Number(numfactura));
+            res.json({ success: true, message: 'Factura confirmada' });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al confirmar factura', error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
+    static async confirmarRutero(req: Request, res: Response): Promise<void> {
+        const id = Number(req.params.id);
+        try {
+            await RuteroService.confirmarRutero(id);
+            res.json({ success: true, message: 'Rutero confirmado como entregado' });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al confirmar rutero', error: error instanceof Error ? error.message : String(error) });
         }
     }
 }
