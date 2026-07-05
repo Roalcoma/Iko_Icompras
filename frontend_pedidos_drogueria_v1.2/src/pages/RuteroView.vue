@@ -13,7 +13,7 @@
     <v-card rounded="xl" elevation="2" class="mb-4 pa-4">
       <v-row dense align="center">
         <v-col cols="12" sm="5">
-          <v-combobox
+          <v-autocomplete
             v-model="zonaSeleccionada"
             :items="zonas"
             item-title="display"
@@ -24,8 +24,12 @@
             density="compact"
             hide-details
             clearable
+            return-object
             @keyup.enter="buscar"
           />
+        </v-col>
+        <v-col cols="auto">
+          <v-btn icon="mdi-format-list-bulleted" variant="tonal" color="primary" title="Ver todas las zonas" @click="modalZonas = true" />
         </v-col>
         <v-col cols="auto">
           <v-btn color="primary" :loading="cargando" prepend-icon="mdi-magnify" @click="buscar">Buscar</v-btn>
@@ -36,6 +40,36 @@
         </v-col>
       </v-row>
     </v-card>
+
+    <!-- Modal zonas -->
+    <v-dialog v-model="modalZonas" max-width="420" scrollable>
+      <v-card rounded="xl">
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon start color="primary">mdi-map-marker-multiple</v-icon>
+          Zonas disponibles
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-2" style="max-height:420px">
+          <v-list density="compact" lines="one">
+            <v-list-item
+              v-for="z in zonas"
+              :key="z.zona"
+              :title="z.display"
+              prepend-icon="mdi-map-marker"
+              rounded="lg"
+              class="mb-1"
+              @click="() => { zonaSeleccionada = z; modalZonas = false; buscar(); }"
+            />
+            <v-list-item v-if="!zonas.length" title="No hay zonas disponibles" disabled />
+          </v-list>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="modalZonas = false">Cerrar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Tabs -->
     <v-card rounded="xl" elevation="2">
@@ -105,8 +139,9 @@ import autoTable from 'jspdf-autotable';
 const API = import.meta.env.VITE_API_URL;
 
 const tab              = ref('oficina');
-const zonaSeleccionada = ref<{ zona: string; display: string } | string | null>(null);
+const zonaSeleccionada = ref<{ zona: string; display: string } | null>(null);
 const zonas            = ref<{ zona: string; display: string }[]>([]);
+const modalZonas       = ref(false);
 const facturas         = ref<any[]>([]);
 const cargando         = ref(false);
 const guardando        = ref(false);
@@ -143,8 +178,7 @@ onMounted(async () => {
 });
 
 const buscar = async () => {
-  const raw = zonaSeleccionada.value;
-  const zona = (typeof raw === 'object' && raw !== null ? raw.zona : raw ?? '').trim();
+  const zona = (zonaSeleccionada.value?.zona ?? '').trim();
   if (!zona) { notify('Ingresa una zona', 'warning'); return; }
   cargando.value = true;
   marcados.value = new Set();
@@ -184,8 +218,7 @@ const confirmarEntregas = async () => {
 
 const generarPDF = () => {
   if (!facturas.value.length) return;
-  const raw2 = zonaSeleccionada.value;
-  const zona = (typeof raw2 === 'object' && raw2 !== null ? raw2.display : raw2 ?? '').toUpperCase();
+  const zona = (zonaSeleccionada.value?.display ?? zonaSeleccionada.value?.zona ?? '').toUpperCase();
   const fecha = new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const hora  = new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
 
