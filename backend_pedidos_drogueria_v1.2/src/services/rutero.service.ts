@@ -30,9 +30,11 @@ export class RuteroService {
                     (
                         SELECT COUNT(DISTINCT BC.IDBULTO)
                         FROM BULTOS_CONTEO BC WITH(NOLOCK)
-                        INNER JOIN PEDVENTACAB PV WITH(NOLOCK) ON PV.SUPEDIDO = BC.IDPEDIDO
+                        INNER JOIN PEDVENTACAB PV WITH(NOLOCK)
+                            ON PV.SUPEDIDO COLLATE DATABASE_DEFAULT = BC.IDPEDIDO COLLATE DATABASE_DEFAULT
                         INNER JOIN ALBVENTACAB AV WITH(NOLOCK)
-                            ON AV.NUMSERIE = PV.SERIEALBARAN AND AV.NUMALBARAN = PV.NUMEROALBARAN
+                            ON AV.NUMSERIE  COLLATE DATABASE_DEFAULT = PV.SERIEALBARAN  COLLATE DATABASE_DEFAULT
+                           AND AV.NUMALBARAN = PV.NUMEROALBARAN
                         WHERE AV.NUMSERIEFAC COLLATE DATABASE_DEFAULT = FV.NUMSERIE COLLATE DATABASE_DEFAULT
                           AND AV.NUMFAC = FV.NUMFACTURA
                     )                                                     AS BULTOS

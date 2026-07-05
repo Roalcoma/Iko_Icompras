@@ -11,7 +11,7 @@
 
     <!-- Filtro zona -->
     <v-card rounded="xl" elevation="2" class="mb-4 pa-4">
-      <v-row dense align="center">
+      <v-row density="comfortable" align="center">
         <v-col cols="12" sm="5">
           <v-autocomplete
             v-model="zonaSeleccionada"

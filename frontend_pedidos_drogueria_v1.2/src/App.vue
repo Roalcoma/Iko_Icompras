@@ -25,7 +25,7 @@
           :to="modulo.ruta"
           :prepend-icon="modulo.icono"
           :title="modulo.nombre"
-          active-color="accent"
+          color="accent"
           rounded="lg"
           class="mb-1 text-white"
         >
