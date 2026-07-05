@@ -27,7 +27,7 @@ export class RuteroService {
                     FV.NUMSERIE + ' - ' + CAST(FV.NUMFACTURA AS VARCHAR(20)) AS FACTURA_VISUAL,
                     ISNULL(FV.TOTALNETO, 0)                             AS TOTAL,
                     CL.NOMBRECLIENTE                                     AS CLIENTE,
-                    ISNULL(CL.DOMICILIO1, ISNULL(CL.DOMICILIO, ''))     AS DIRECCION,
+                    ISNULL(CL.DOMICILIO1, '')                             AS DIRECCION,
                     ISNULL(R.DESCRIPCION, '')                             AS NOMBRE_RUTA,
                     (
                         SELECT COUNT(DISTINCT BC.IDBULTO)
