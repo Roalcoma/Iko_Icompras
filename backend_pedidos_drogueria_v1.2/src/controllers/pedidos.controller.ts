@@ -47,7 +47,7 @@ export class PedidosControllers {
             }
 
             // Lista paginada con filtros opcionales
-            const { clienteId, codVendedor, riesgo } = req.query;
+            const { clienteId, codVendedor, riesgo, codruta } = req.query;
             const result = await PedidosServices.getPedidos(
                 page, limit,
                 estatus     as string | undefined,
@@ -55,6 +55,7 @@ export class PedidosControllers {
                 clienteId   as string | undefined,
                 codVendedor as string | undefined,
                 riesgo      as string | undefined,
+                codruta     as string | undefined,
             );
             if (!result.success) return res.status(500).json(result);
             return res.status(200).json(result);

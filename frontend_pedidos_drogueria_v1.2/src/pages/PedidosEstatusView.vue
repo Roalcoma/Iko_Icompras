@@ -9,10 +9,19 @@
           <p class="text-body-2 text-grey-darken-1">Gestione el flujo logístico y actualice estados</p>
         </div>
         <v-spacer></v-spacer>
-        <v-btn 
-          prepend-icon="mdi-sync" 
-          variant="flat" 
-          color="white" 
+        <v-chip
+          color="primary"
+          variant="tonal"
+          size="large"
+          prepend-icon="mdi-clipboard-list-outline"
+          class="mr-3 font-weight-black text-h6 px-5"
+        >
+          {{ totalPedidos.toLocaleString() }} pedido{{ totalPedidos !== 1 ? 's' : '' }}
+        </v-chip>
+        <v-btn
+          prepend-icon="mdi-sync"
+          variant="flat"
+          color="white"
           class="text-primary elevation-1 rounded-pill px-6"
           :loading="loading"
           @click="obtenerPedidos()"
@@ -36,12 +45,27 @@
         <v-text-field v-model="filtros.codVendedor" label="Código Vendedor" density="compact" variant="outlined"
           clearable hide-details prepend-inner-icon="mdi-account-tie" type="number" @update:model-value="aplicarFiltros" />
       </v-col>
-      <v-col cols="12" sm="6" md="3">
+      <v-col cols="12" sm="6" md="2">
         <v-select v-model="filtros.estatus" label="Estatus" density="compact" variant="outlined"
           clearable hide-details prepend-inner-icon="mdi-list-status"
           :items="estatusOpciones" @update:model-value="aplicarFiltros" />
       </v-col>
-      <v-col cols="12" sm="6" md="3">
+      <v-col cols="12" sm="6" md="2">
+        <v-autocomplete
+          v-model="filtros.codruta"
+          :items="zonas"
+          item-title="display"
+          item-value="zona"
+          label="Ruta"
+          density="compact"
+          variant="outlined"
+          clearable
+          hide-details
+          prepend-inner-icon="mdi-map-marker"
+          @update:model-value="aplicarFiltros"
+        />
+      </v-col>
+      <v-col cols="12" sm="6" md="2">
         <v-select v-model="filtros.riesgo" label="Riesgo Crédito" density="compact" variant="outlined"
           clearable hide-details prepend-inner-icon="mdi-shield-half-full"
           :items="['BAJO','MEDIO','ALTO','SUPERADO','SIN LIMITE']" @update:model-value="aplicarFiltros" />
@@ -331,10 +355,11 @@ const headers = [
 
 const estatusOpciones = [
   'PENDIENTE', 'PENDIENTE POR AUTORIZACION', 'APROBACION PSICOTROPICOS',
-  'AUTORIZADO', 'OK', 'EMPACADO', 'FINALIZADO', 'CANCELADO',
+  'AUTORIZADO', 'ICG', 'OK', 'EMPACADO', 'FINALIZADO', 'CANCELADO',
 ];
 
-const filtros = ref({ buscarId: '', clienteId: '', codVendedor: '', estatus: null as string | null, riesgo: null as string | null });
+const zonas  = ref<{ zona: string; display: string }[]>([]);
+const filtros = ref({ buscarId: '', clienteId: '', codVendedor: '', estatus: null as string | null, riesgo: null as string | null, codruta: null as string | null });
 
 let filtroTimer: ReturnType<typeof setTimeout> | null = null;
 const aplicarFiltros = () => {
@@ -351,6 +376,7 @@ const obtenerPedidos = async (page = 1, limit = 10) => {
     if (filtros.value.codVendedor) params.codVendedor = filtros.value.codVendedor;
     if (filtros.value.estatus)    params.estatus     = filtros.value.estatus;
     if (filtros.value.riesgo)     params.riesgo      = filtros.value.riesgo;
+    if (filtros.value.codruta)    params.codruta     = filtros.value.codruta;
     const response = await axios.get(`${import.meta.env.VITE_API_URL}/pedidos`, { params });
     if (response.data.success) {
       pedidos.value = response.data.data;
@@ -519,7 +545,13 @@ const imprimirPDF = async (item: any) => {
 };
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
-onMounted(() => { refreshInterval = setInterval(() => obtenerPedidos(), 60_000); });
+onMounted(async () => {
+  try {
+    const res = await axios.get(`${import.meta.env.VITE_API_URL}/rutero/zonas`);
+    zonas.value = res.data.data ?? [];
+  } catch { /* silencioso */ }
+  refreshInterval = setInterval(() => obtenerPedidos(), 60_000);
+});
 onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
 </script>
 
