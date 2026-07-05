@@ -52,8 +52,8 @@ export class AuthController {
         const id          = parseInt(req.params['id'] as string);
         const visibilidad = parseInt(req.body.visibilidad);
 
-        if (isNaN(id) || isNaN(visibilidad) || visibilidad < 0 || visibilidad > 4095) {
-            res.status(400).json({ success: false, message: 'Visibilidad debe ser un número entre 0 y 4095' });
+        if (isNaN(id) || isNaN(visibilidad) || visibilidad < 0 || visibilidad > 8191) {
+            res.status(400).json({ success: false, message: 'Visibilidad debe ser un número entre 0 y 8191' });
             return;
         }
         try {
