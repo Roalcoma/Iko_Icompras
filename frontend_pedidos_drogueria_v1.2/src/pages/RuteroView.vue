@@ -151,9 +151,7 @@ const snackbar         = ref({ show: false, text: '', color: '' });
 const headersOficina = [
   { title: 'Factura',    key: 'FACTURA_VISUAL', sortable: false },
   { title: 'Cliente',    key: 'CLIENTE' },
-  { title: 'Dirección',  key: 'DIRECCION', sortable: false },
   { title: 'Ruta',       key: 'NOMBRE_RUTA' },
-  { title: 'Zona',       key: 'ZONA' },
   { title: 'Bultos',     key: 'BULTOS', align: 'center' as const },
   { title: 'Total',      key: 'TOTAL', align: 'end' as const },
 ];

@@ -23,11 +23,9 @@ export class RuteroService {
                 SELECT
                     FV.NUMSERIE,
                     FV.NUMFACTURA,
-                    FV.N,
                     FV.NUMSERIE + ' - ' + CAST(FV.NUMFACTURA AS VARCHAR(20)) AS FACTURA_VISUAL,
-                    ISNULL(FV.TOTALNETO, 0)                             AS TOTAL,
-                    CL.NOMBRECLIENTE                                     AS CLIENTE,
-                    ISNULL(CL.DOMICILIO1, '')                             AS DIRECCION,
+                    ISNULL(FV.TOTALNETO, 0)                              AS TOTAL,
+                    CL.NOMBRECLIENTE                                      AS CLIENTE,
                     ISNULL(R.DESCRIPCION, '')                             AS NOMBRE_RUTA,
                     (
                         SELECT COUNT(DISTINCT BC.IDBULTO)
@@ -36,12 +34,12 @@ export class RuteroService {
                         INNER JOIN ALBVENTACAB AV WITH(NOLOCK)
                             ON AV.NUMSERIE = PV.SERIEALBARAN AND AV.NUMALBARAN = PV.NUMEROALBARAN
                         WHERE AV.NUMSERIEFAC = FV.NUMSERIE AND AV.NUMFAC = FV.NUMFACTURA
-                    )                                                        AS BULTOS
+                    )                                                     AS BULTOS
                 FROM FACTURASVENTA FV WITH(NOLOCK)
                 INNER JOIN CLIENTES CL WITH(NOLOCK)
                     ON CL.CODCLIENTE = FV.CODCLIENTE
                 LEFT JOIN FACTURASVENTACAMPOSLIBRES FVCL WITH(NOLOCK)
-                    ON FVCL.NUMSERIE = FV.NUMSERIE AND FVCL.NUMFACTURA = FV.NUMFACTURA AND FVCL.N = FV.N
+                    ON FVCL.NUMSERIE = FV.NUMSERIE AND FVCL.NUMFACTURA = FV.NUMFACTURA
                 LEFT JOIN RUTAS R WITH(NOLOCK)
                     ON R.CODRUTA = CL.CODRUTA
                 WHERE CL.CODRUTA = @CODRUTA
