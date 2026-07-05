@@ -21,7 +21,7 @@
           <strong>{{ m.bit }}</strong> — {{ m.nombre }}
         </v-chip>
         <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-star">
-          <strong>4095</strong> — Acceso total (todos los módulos)
+          <strong>8191</strong> — Acceso total (todos los módulos)
         </v-chip>
       </div>
     </v-card>
