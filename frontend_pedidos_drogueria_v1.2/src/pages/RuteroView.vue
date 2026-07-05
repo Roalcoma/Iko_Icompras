@@ -36,7 +36,9 @@
         </v-col>
         <v-spacer />
         <v-col cols="auto">
-          <v-btn color="success" variant="tonal" prepend-icon="mdi-file-pdf-box" :disabled="!facturas.length" @click="generarPDF">Generar PDF</v-btn>
+          <v-btn color="success" variant="tonal" prepend-icon="mdi-file-pdf-box" :disabled="!seleccionadasPDF.size" @click="generarPDF">
+            Generar PDF ({{ seleccionadasPDF.size }})
+          </v-btn>
         </v-col>
       </v-row>
     </v-card>
@@ -82,6 +84,15 @@
 
         <!-- TAB OFICINA -->
         <v-tabs-window-item value="oficina">
+          <div v-if="facturas.length" class="pa-3 d-flex align-center gap-2">
+            <v-btn
+              size="small" variant="tonal"
+              :color="todasSeleccionadas ? 'grey' : 'primary'"
+              :prepend-icon="todasSeleccionadas ? 'mdi-checkbox-multiple-blank-outline' : 'mdi-checkbox-multiple-marked'"
+              @click="toggleSeleccionarTodas"
+            >{{ todasSeleccionadas ? 'Deseleccionar todas' : 'Seleccionar todas' }}</v-btn>
+            <span class="text-caption text-grey-darken-1">{{ seleccionadasPDF.size }} de {{ facturas.length }} seleccionadas para PDF</span>
+          </div>
           <v-data-table
             :headers="headersOficina"
             :items="facturas"
@@ -90,6 +101,13 @@
             no-data-text="Busca una zona para ver las facturas pendientes"
             class="rounded-b-xl"
           >
+            <template #item.sel="{ item }">
+              <v-checkbox-btn
+                :model-value="seleccionadasPDF.has(claveFactura(item))"
+                color="primary"
+                @update:model-value="toggleSelPDF(item)"
+              />
+            </template>
             <template #item.TOTAL="{ item }">
               <span class="font-weight-bold">${{ Number(item.TOTAL).toFixed(2) }}</span>
             </template>
@@ -131,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -146,9 +164,30 @@ const facturas         = ref<any[]>([]);
 const cargando         = ref(false);
 const guardando        = ref(false);
 const marcados         = ref<Set<string>>(new Set());
+const seleccionadasPDF = ref<Set<string>>(new Set());
 const snackbar         = ref({ show: false, text: '', color: '' });
 
+const todasSeleccionadas = computed(() =>
+  facturas.value.length > 0 && facturas.value.every(f => seleccionadasPDF.value.has(claveFactura(f)))
+);
+
+const toggleSelPDF = (item: any) => {
+  const clave = claveFactura(item);
+  const s = new Set(seleccionadasPDF.value);
+  if (s.has(clave)) s.delete(clave); else s.add(clave);
+  seleccionadasPDF.value = s;
+};
+
+const toggleSeleccionarTodas = () => {
+  if (todasSeleccionadas.value) {
+    seleccionadasPDF.value = new Set();
+  } else {
+    seleccionadasPDF.value = new Set(facturas.value.map(f => claveFactura(f)));
+  }
+};
+
 const headersOficina = [
+  { title: '',           key: 'sel',            sortable: false, width: '48px' },
   { title: 'Factura',    key: 'FACTURA_VISUAL', sortable: false },
   { title: 'Cliente',    key: 'CLIENTE' },
   { title: 'Ruta',       key: 'NOMBRE_RUTA' },
@@ -183,6 +222,7 @@ const buscar = async () => {
   try {
     const res = await axios.get(`${API}/rutero/facturas`, { params: { zona } });
     facturas.value = res.data.data ?? [];
+    seleccionadasPDF.value = new Set(facturas.value.map((f: any) => claveFactura(f)));
     if (!facturas.value.length) notify('No hay facturas pendientes para esa zona', 'info');
   } catch (e: any) {
     const detail = e.response?.data?.error || e.response?.data?.message || e.message || 'Error desconocido';
@@ -256,8 +296,9 @@ const generarPDF = () => {
     doc.line(10, 30, 205, 30);
 
     // ---- TABLA ----
+    const seleccionadas = facturas.value.filter(f => seleccionadasPDF.value.has(claveFactura(f)));
     const grouped: Record<string, any[]> = {};
-    for (const f of facturas.value) {
+    for (const f of seleccionadas) {
       const key = f.CLIENTE;
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(f);
