@@ -6,17 +6,11 @@ export class RuteroService {
         const pool = await connectDb();
         const result = await pool.request().query(`
             SELECT
-                CLC.ZONA,
-                CASE
-                    WHEN MIN(ISNULL(R.RUTA, '')) <> '' THEN CLC.ZONA + ' - ' + MIN(R.RUTA)
-                    WHEN MIN(ISNULL(R.NOMBRE, '')) <> '' THEN CLC.ZONA + ' - ' + MIN(R.NOMBRE)
-                    ELSE CLC.ZONA
-                END AS DISPLAY
-            FROM CLIENTESCAMPOSLIBRES CLC WITH(NOLOCK)
-            LEFT JOIN RUTAS R WITH(NOLOCK) ON R.CODRUTA = TRY_CAST(CLC.ZONA AS INT)
-            WHERE CLC.ZONA IS NOT NULL AND LTRIM(RTRIM(CLC.ZONA)) <> ''
-            GROUP BY CLC.ZONA
-            ORDER BY CLC.ZONA
+                CAST(CODRUTA AS VARCHAR(20)) AS ZONA,
+                CAST(CODRUTA AS VARCHAR(20)) + ' - ' + ISNULL(RUTA, ISNULL(NOMBRE, '')) AS DISPLAY
+            FROM RUTAS WITH(NOLOCK)
+            WHERE CODRUTA IS NOT NULL
+            ORDER BY CODRUTA
         `);
         return result.recordset.map((r: any) => ({ zona: r.ZONA, display: r.DISPLAY }));
     }
@@ -24,7 +18,7 @@ export class RuteroService {
     static async getFacturas(zona: string): Promise<any[]> {
         const pool = await connectDb();
         const result = await pool.request()
-            .input('ZONA', mssql.NVarChar(100), `%${zona}%`)
+            .input('CODRUTA', mssql.Int, parseInt(zona))
             .query(`
                 SELECT
                     FV.NUMSERIE,
@@ -34,20 +28,17 @@ export class RuteroService {
                     ISNULL(FV.TOTALNETO, 0)                             AS TOTAL,
                     CL.NOMBRECLIENTE                                     AS CLIENTE,
                     ISNULL(CL.DOMICILIO1, ISNULL(CL.DOMICILIO, ''))     AS DIRECCION,
-                    ISNULL(CLC.ZONA, '')                                 AS ZONA,
-                    ISNULL(FVCL.BULTOS, 1)                               AS BULTOS,
-                    ISNULL(R.RUTA, ISNULL(R.NOMBRE, ''))                 AS NOMBRE_RUTA
+                    ISNULL(R.RUTA, ISNULL(R.NOMBRE, ''))                 AS NOMBRE_RUTA,
+                    ISNULL(FVCL.BULTOS, 1)                               AS BULTOS
                 FROM FACTURASVENTA FV WITH(NOLOCK)
                 INNER JOIN FACTURASVENTACAMPOSLIBRES FVCL WITH(NOLOCK)
                     ON FVCL.NUMSERIE = FV.NUMSERIE AND FVCL.NUMFACTURA = FV.NUMFACTURA AND FVCL.N = FV.N
                 INNER JOIN CLIENTES CL WITH(NOLOCK)
                     ON CL.CODCLIENTE = FV.CODCLIENTE
-                INNER JOIN CLIENTESCAMPOSLIBRES CLC WITH(NOLOCK)
-                    ON CLC.CODCLIENTE = CL.CODCLIENTE
                 LEFT JOIN RUTAS R WITH(NOLOCK)
                     ON R.CODRUTA = CL.CODRUTA
                 WHERE FVCL.FECHARECIBIDO IS NULL
-                  AND CLC.ZONA LIKE @ZONA
+                  AND CL.CODRUTA = @CODRUTA
                 ORDER BY CL.NOMBRECLIENTE, FV.NUMSERIE, FV.NUMFACTURA
             `);
         return result.recordset;
