@@ -31,14 +31,14 @@ export class RuteroService {
                     ISNULL(R.RUTA, ISNULL(R.NOMBRE, ''))                 AS NOMBRE_RUTA,
                     ISNULL(FVCL.BULTOS, 1)                               AS BULTOS
                 FROM FACTURASVENTA FV WITH(NOLOCK)
-                INNER JOIN FACTURASVENTACAMPOSLIBRES FVCL WITH(NOLOCK)
-                    ON FVCL.NUMSERIE = FV.NUMSERIE AND FVCL.NUMFACTURA = FV.NUMFACTURA AND FVCL.N = FV.N
                 INNER JOIN CLIENTES CL WITH(NOLOCK)
                     ON CL.CODCLIENTE = FV.CODCLIENTE
+                LEFT JOIN FACTURASVENTACAMPOSLIBRES FVCL WITH(NOLOCK)
+                    ON FVCL.NUMSERIE = FV.NUMSERIE AND FVCL.NUMFACTURA = FV.NUMFACTURA AND FVCL.N = FV.N
                 LEFT JOIN RUTAS R WITH(NOLOCK)
                     ON R.CODRUTA = CL.CODRUTA
-                WHERE FVCL.FECHARECIBIDO IS NULL
-                  AND CL.CODRUTA = @CODRUTA
+                WHERE CL.CODRUTA = @CODRUTA
+                  AND ISNULL(FVCL.FECHARECIBIDO, '') = ''
                 ORDER BY CL.NOMBRECLIENTE, FV.NUMSERIE, FV.NUMFACTURA
             `);
         return result.recordset;
