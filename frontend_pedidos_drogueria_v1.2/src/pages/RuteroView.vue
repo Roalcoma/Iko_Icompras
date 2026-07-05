@@ -217,133 +217,97 @@ const confirmarEntregas = async () => {
 
 const generarPDF = () => {
   if (!facturas.value.length) return;
-  const zonaDisplay = (zonaSeleccionada.value?.display ?? zonaSeleccionada.value?.zona ?? '').toUpperCase();
+  const zona  = (zonaSeleccionada.value?.display ?? zonaSeleccionada.value?.zona ?? '').toUpperCase();
   const fecha = new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const hora  = new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
-  const PW = 215.9; // letter width mm
-  const ML = 10;    // margin left
-  const MR = 10;    // margin right
-  const CW = PW - ML - MR; // content width
 
-  const drawHeader = (pageNum: number, totalPages: number) => {
-    // Línea superior
+  // Logo
+  const logo = new Image();
+  logo.src = '/src/assets/drogueria_logo.png';
+
+  const buildPDF = () => {
+    // ---- CABECERA ----
+    try { doc.addImage(logo, 'PNG', 10, 8, 30, 14); } catch { /* sin logo */ }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(31, 78, 121);
+    doc.text('DROGUERIA INTERCONTINENTAL, C.A.', 105, 13, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(60, 60, 60);
+    doc.text('RIF: J-501590192', 105, 18, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(31, 78, 121);
+    doc.text('RUTERO DE ENTREGA', 105, 23, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(60, 60, 60);
+    doc.text(`Ruta: ${zona}     Fecha: ${fecha}  ${hora}`, 105, 27.5, { align: 'center' });
+
     doc.setDrawColor(31, 78, 121);
-    doc.setLineWidth(0.8);
-    doc.line(ML, 8, PW - MR, 8);
+    doc.setLineWidth(0.5);
+    doc.line(10, 30, 205, 30);
 
-    // Empresa + RIF
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(31, 78, 121);
-    doc.text('DROGUERIA INTERCONTINENTAL, C.A.', PW - MR, 14, { align: 'right' });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(80, 80, 80);
-    doc.text('RIF: J-501590192', PW - MR, 18.5, { align: 'right' });
+    // ---- TABLA ----
+    const grouped: Record<string, any[]> = {};
+    for (const f of facturas.value) {
+      const key = f.CLIENTE;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(f);
+    }
 
-    // Título izquierda
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.setTextColor(31, 78, 121);
-    doc.text('RUTERO DE ENTREGA', ML, 14);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(80, 80, 80);
-    doc.text(`Ruta: ${zonaDisplay}`, ML, 18.5);
+    const rows: any[] = [];
+    let totalBultos = 0;
 
-    // Fecha + página
-    doc.setFontSize(7.5);
-    doc.text(`Fecha: ${fecha}  ${hora}`, ML, 22.5);
-    doc.text(`Pág. ${pageNum} de ${totalPages}`, PW - MR, 22.5, { align: 'right' });
+    for (const cliente of Object.keys(grouped)) {
+      const grupo = grouped[cliente];
+      const ruta  = grupo[0]?.NOMBRE_RUTA || '';
+      const factsList = grupo.map((f: any) => f.FACTURA_VISUAL).join('\n');
+      const bultos = grupo.reduce((s: number, f: any) => s + Number(f.BULTOS || 0), 0);
+      totalBultos += bultos;
+      const clienteTexto = ruta ? `${cliente}\nRuta: ${ruta}` : cliente;
+      rows.push([clienteTexto, factsList, String(bultos), '']);
+    }
 
-    // Línea inferior cabecera
-    doc.setLineWidth(0.4);
-    doc.line(ML, 24.5, PW - MR, 24.5);
-  };
-
-  // Agrupar por cliente
-  const grouped: Record<string, any[]> = {};
-  for (const f of facturas.value) {
-    if (!grouped[f.CLIENTE]) grouped[f.CLIENTE] = [];
-    grouped[f.CLIENTE].push(f);
-  }
-
-  // Construir filas: fila-cliente (merge) + filas de facturas
-  const body: any[] = [];
-  let totalBultos = 0;
-  let totalDocs   = 0;
-
-  for (const cliente of Object.keys(grouped)) {
-    const grupo   = grouped[cliente];
-    const ruta    = grupo[0]?.NOMBRE_RUTA || '';
-    const bultos  = grupo.reduce((s: number, f: any) => s + Number(f.BULTOS || 0), 0);
-    totalBultos  += bultos;
-    totalDocs    += grupo.length;
-
-    // Fila de cabecera de cliente
-    body.push([
-      {
-        content: `${cliente}${ruta ? `\nRuta: ${ruta}` : ''}`,
-        colSpan: 5,
-        styles: { fontStyle: 'bold', fillColor: [220, 230, 241], textColor: [20, 50, 100], fontSize: 8 }
-      }
+    rows.push([
+      { content: 'TOTALES', styles: { fontStyle: 'bold' } },
+      '',
+      { content: String(totalBultos), styles: { fontStyle: 'bold', halign: 'center' } },
+      ''
     ]);
 
-    // Filas de facturas del cliente
-    for (const f of grupo) {
-      body.push([
-        f.FACTURA_VISUAL,
-        { content: String(f.BULTOS ?? 0), styles: { halign: 'center' } },
-        { content: '', styles: { halign: 'center' } },  // DOCS
-        { content: '', styles: { halign: 'center' } },  // CESTAS
-        '',  // FIRMA
-      ]);
-    }
+    autoTable(doc, {
+      startY: 32,
+      head: [['CLIENTE / DIRECCIÓN', 'FACTURAS', 'BULTOS', 'RECIBIDO / FIRMA']],
+      body: rows,
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 2, valign: 'top' },
+      headStyles: { fillColor: [31, 78, 121], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 70 },
+        1: { cellWidth: 45 },
+        2: { cellWidth: 15, halign: 'center' },
+        3: { cellWidth: 65 },
+      },
+      rowPageBreak: 'avoid',
+    });
+
+    doc.save(`Rutero_${zona}_${fecha.replace(/\//g, '-')}.pdf`);
+    notify('PDF generado', 'success');
+  };
+
+  if (logo.complete) {
+    buildPDF();
+  } else {
+    logo.onload  = buildPDF;
+    logo.onerror = buildPDF;
   }
-
-  // Fila totales
-  body.push([
-    { content: 'TOTALES', styles: { fontStyle: 'bold', fillColor: [31, 78, 121], textColor: [255,255,255] } },
-    { content: String(totalBultos), styles: { halign: 'center', fontStyle: 'bold', fillColor: [31, 78, 121], textColor: [255,255,255] } },
-    { content: String(totalDocs),   styles: { halign: 'center', fontStyle: 'bold', fillColor: [31, 78, 121], textColor: [255,255,255] } },
-    { content: '',                  styles: { fillColor: [31, 78, 121] } },
-    { content: '',                  styles: { fillColor: [31, 78, 121] } },
-  ]);
-
-  // Primera pasada para contar páginas
-  let pageCount = 1;
-  autoTable(doc, {
-    startY: 27,
-    head: [['FACTURA', 'BULTOS', 'DOCS.', 'CESTAS', 'RECIBÍ CONFORME / FIRMA']],
-    body,
-    theme: 'grid',
-    margin: { left: ML, right: MR },
-    styles: { fontSize: 7.5, cellPadding: 1.8, valign: 'middle', textColor: [30, 30, 30] },
-    headStyles: { fillColor: [31, 78, 121], textColor: 255, fontStyle: 'bold', fontSize: 8, halign: 'center' },
-    columnStyles: {
-      0: { cellWidth: 38 },
-      1: { cellWidth: 16, halign: 'center' },
-      2: { cellWidth: 16, halign: 'center' },
-      3: { cellWidth: 16, halign: 'center' },
-      4: { cellWidth: CW - 38 - 16 - 16 - 16 },
-    },
-    rowPageBreak: 'avoid',
-    didDrawPage: (data) => {
-      pageCount = data.pageNumber;
-    },
-  });
-
-  pageCount = (doc as any).internal.getNumberOfPages();
-
-  // Segunda pasada: dibujar cabeceras en todas las páginas
-  for (let p = 1; p <= pageCount; p++) {
-    doc.setPage(p);
-    drawHeader(p, pageCount);
-  }
-
-  doc.save(`Rutero_${zonaDisplay}_${fecha.replace(/\//g, '-')}.pdf`);
-  notify('PDF generado', 'success');
 };
 </script>
