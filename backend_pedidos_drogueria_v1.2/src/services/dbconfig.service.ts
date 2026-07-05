@@ -9,6 +9,7 @@ export interface DbConfig {
     dbName:              string;
     dbGeneralName:       string;
     dbPruebas:           string;
+    dbRutero:            string;
     esquema:             string;
     port:                number;
     dptoPsicotropicos:   number;
@@ -39,6 +40,7 @@ export function getDbConfig(): DbConfig {
         dbName:        file.dbName        ?? process.env.DB_NAME          ?? '',
         dbGeneralName: file.dbGeneralName ?? process.env.DB_GENERAL_NAME  ?? 'general_drogueria',
         dbPruebas:     file.dbPruebas     ?? process.env.DB_PRUEBAS       ?? '',
+        dbRutero:      file.dbRutero      ?? process.env.DB_RUTERO        ?? '',
         esquema:       file.esquema       ?? process.env.DB_ESQUEMA        ?? 'dbo',
         port:                Number(file.port                ?? process.env.DB_PORT          ?? 1433),
         dptoPsicotropicos:   Number((file as any).dptoPsicotropicos  ?? 9),
@@ -65,6 +67,7 @@ export function getDbConfigPublica(): Omit<DbConfig, 'password'> & { passwordMas
         dbName:              cfg.dbName,
         dbGeneralName:       cfg.dbGeneralName,
         dbPruebas:           cfg.dbPruebas,
+        dbRutero:            cfg.dbRutero,
         esquema:             cfg.esquema,
         port:                cfg.port,
         dptoPsicotropicos:   cfg.dptoPsicotropicos,

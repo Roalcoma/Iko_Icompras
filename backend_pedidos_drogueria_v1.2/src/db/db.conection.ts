@@ -9,10 +9,11 @@ export const dbModeContext = new AsyncLocalStorage<{ modoPruebas: boolean }>();
 
 let poolProd:    sql.ConnectionPool | null = null;
 let poolPruebas: sql.ConnectionPool | null = null;
+let poolRutero:  sql.ConnectionPool | null = null;
 
-function buildConfig(): { prod: sql.config; pruebas: sql.config } {
+function buildBase(): sql.config {
     const cfg = getDbConfig();
-    const base: sql.config = {
+    return {
         user:     cfg.user,
         password: cfg.password,
         server:   cfg.server,
@@ -20,6 +21,11 @@ function buildConfig(): { prod: sql.config; pruebas: sql.config } {
         pool:     { max: 10, min: 0, idleTimeoutMillis: 30000 },
         options:  { encrypt: false, trustServerCertificate: true },
     };
+}
+
+function buildConfig(): { prod: sql.config; pruebas: sql.config } {
+    const cfg = getDbConfig();
+    const base = buildBase();
     return {
         prod:    { ...base, database: cfg.dbName },
         pruebas: { ...base, database: cfg.dbPruebas || cfg.dbName },
@@ -51,17 +57,33 @@ export async function connectDb(): Promise<sql.ConnectionPool> {
     return poolProd;
 }
 
+export async function connectRuteroDB(): Promise<sql.ConnectionPool> {
+    const cfg = getDbConfig();
+    if (!cfg.dbRutero) throw new Error('dbRutero no configurado en connections.json');
+    if (poolRutero && poolRutero.connected) return poolRutero;
+    poolRutero = await new sql.ConnectionPool({ ...buildBase(), database: cfg.dbRutero }).connect();
+    poolRutero.on('error', (err: Error) => {
+        console.error('[Pool RUTERO] Error:', err.message);
+        poolRutero = null;
+    });
+    console.log(`Conexión a BD RUTERO establecida (${cfg.dbRutero}).`);
+    return poolRutero;
+}
+
 export async function reconectarDb(): Promise<void> {
     try { if (poolProd    && poolProd.connected)    await poolProd.close();    } catch { /* ignore */ }
     try { if (poolPruebas && poolPruebas.connected) await poolPruebas.close(); } catch { /* ignore */ }
+    try { if (poolRutero  && poolRutero.connected)  await poolRutero.close();  } catch { /* ignore */ }
     poolProd    = null;
     poolPruebas = null;
+    poolRutero  = null;
     await connectDb(); // abre con nueva config
 }
 
 export async function closeDb(): Promise<void> {
     if (poolProd    && poolProd.connected)    await poolProd.close();
     if (poolPruebas && poolPruebas.connected) await poolPruebas.close();
+    if (poolRutero  && poolRutero.connected)  await poolRutero.close();
 }
 
 export async function probarConexion(cfg: { server: string; user: string; password: string; dbName: string; port?: number }): Promise<{ ok: boolean; mensaje: string }> {
