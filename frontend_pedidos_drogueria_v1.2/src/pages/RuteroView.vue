@@ -16,6 +16,8 @@
           <v-combobox
             v-model="zonaSeleccionada"
             :items="zonas"
+            item-title="display"
+            item-value="zona"
             label="Zona"
             prepend-inner-icon="mdi-map-marker"
             variant="outlined"
@@ -103,8 +105,8 @@ import autoTable from 'jspdf-autotable';
 const API = import.meta.env.VITE_API_URL;
 
 const tab              = ref('oficina');
-const zonaSeleccionada = ref('');
-const zonas            = ref<string[]>([]);
+const zonaSeleccionada = ref<{ zona: string; display: string } | string | null>(null);
+const zonas            = ref<{ zona: string; display: string }[]>([]);
 const facturas         = ref<any[]>([]);
 const cargando         = ref(false);
 const guardando        = ref(false);
@@ -141,7 +143,8 @@ onMounted(async () => {
 });
 
 const buscar = async () => {
-  const zona = (zonaSeleccionada.value ?? '').trim();
+  const raw = zonaSeleccionada.value;
+  const zona = (typeof raw === 'object' && raw !== null ? raw.zona : raw ?? '').trim();
   if (!zona) { notify('Ingresa una zona', 'warning'); return; }
   cargando.value = true;
   marcados.value = new Set();
@@ -181,7 +184,8 @@ const confirmarEntregas = async () => {
 
 const generarPDF = () => {
   if (!facturas.value.length) return;
-  const zona = (zonaSeleccionada.value ?? '').toUpperCase();
+  const raw2 = zonaSeleccionada.value;
+  const zona = (typeof raw2 === 'object' && raw2 !== null ? raw2.display : raw2 ?? '').toUpperCase();
   const fecha = new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const hora  = new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
 

@@ -2,14 +2,22 @@ import { connectDb, mssql } from '../db/db.conection';
 
 export class RuteroService {
 
-    static async getZonas(): Promise<string[]> {
+    static async getZonas(): Promise<{ zona: string; display: string }[]> {
         const pool = await connectDb();
         const result = await pool.request().query(`
-            SELECT DISTINCT ZONA FROM CLIENTESCAMPOSLIBRES
-            WHERE ZONA IS NOT NULL AND LTRIM(RTRIM(ZONA)) <> ''
-            ORDER BY ZONA
+            SELECT DISTINCT
+                CLC.ZONA,
+                CASE
+                    WHEN R.RUTA   IS NOT NULL THEN CLC.ZONA + ' - ' + R.RUTA
+                    WHEN R.NOMBRE IS NOT NULL THEN CLC.ZONA + ' - ' + R.NOMBRE
+                    ELSE CLC.ZONA
+                END AS DISPLAY
+            FROM CLIENTESCAMPOSLIBRES CLC
+            LEFT JOIN RUTAS R WITH(NOLOCK) ON R.CODRUTA = CLC.ZONA
+            WHERE CLC.ZONA IS NOT NULL AND LTRIM(RTRIM(CLC.ZONA)) <> ''
+            ORDER BY CLC.ZONA
         `);
-        return result.recordset.map((r: any) => r.ZONA);
+        return result.recordset.map((r: any) => ({ zona: r.ZONA, display: r.DISPLAY }));
     }
 
     static async getFacturas(zona: string): Promise<any[]> {
