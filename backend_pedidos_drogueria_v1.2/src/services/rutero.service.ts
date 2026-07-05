@@ -13,7 +13,7 @@ export class RuteroService {
                     ELSE CLC.ZONA
                 END AS DISPLAY
             FROM CLIENTESCAMPOSLIBRES CLC
-            LEFT JOIN RUTAS R WITH(NOLOCK) ON R.CODRUTA = CLC.ZONA
+            LEFT JOIN RUTAS R WITH(NOLOCK) ON CAST(R.CODRUTA AS NVARCHAR(50)) = LTRIM(RTRIM(CLC.ZONA))
             WHERE CLC.ZONA IS NOT NULL AND LTRIM(RTRIM(CLC.ZONA)) <> ''
             ORDER BY CLC.ZONA
         `);
