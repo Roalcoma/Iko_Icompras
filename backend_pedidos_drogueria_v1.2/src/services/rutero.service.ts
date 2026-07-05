@@ -7,7 +7,7 @@ export class RuteroService {
         const result = await pool.request().query(`
             SELECT
                 CAST(CODRUTA AS VARCHAR(20)) AS ZONA,
-                CAST(CODRUTA AS VARCHAR(20)) + ' - ' + ISNULL(RUTA, ISNULL(NOMBRE, '')) AS DISPLAY
+                CAST(CODRUTA AS VARCHAR(20)) + ' - ' + ISNULL(DESCRIPCION, '') AS DISPLAY
             FROM RUTAS WITH(NOLOCK)
             WHERE CODRUTA IS NOT NULL
             ORDER BY CODRUTA
@@ -28,7 +28,7 @@ export class RuteroService {
                     ISNULL(FV.TOTALNETO, 0)                             AS TOTAL,
                     CL.NOMBRECLIENTE                                     AS CLIENTE,
                     ISNULL(CL.DOMICILIO1, ISNULL(CL.DOMICILIO, ''))     AS DIRECCION,
-                    ISNULL(R.RUTA, ISNULL(R.NOMBRE, ''))                 AS NOMBRE_RUTA,
+                    ISNULL(R.DESCRIPCION, '')                             AS NOMBRE_RUTA,
                     ISNULL(FVCL.BULTOS, 1)                               AS BULTOS
                 FROM FACTURASVENTA FV WITH(NOLOCK)
                 INNER JOIN CLIENTES CL WITH(NOLOCK)
