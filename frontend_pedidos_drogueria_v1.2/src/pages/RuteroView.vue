@@ -187,7 +187,8 @@ const buscar = async () => {
     facturas.value = res.data.data ?? [];
     if (!facturas.value.length) notify('No hay facturas pendientes para esa zona', 'info');
   } catch (e: any) {
-    notify(e.response?.data?.message || 'Error al buscar facturas', 'error');
+    const detail = e.response?.data?.error || e.response?.data?.message || e.message || 'Error desconocido';
+    notify(detail, 'error');
   } finally {
     cargando.value = false;
   }
