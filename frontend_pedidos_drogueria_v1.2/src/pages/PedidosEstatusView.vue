@@ -70,6 +70,14 @@
           clearable hide-details prepend-inner-icon="mdi-shield-half-full"
           :items="['BAJO','MEDIO','ALTO','SUPERADO','SIN LIMITE']" @update:model-value="aplicarFiltros" />
       </v-col>
+      <v-col cols="12" sm="6" md="2">
+        <v-text-field v-model="filtros.fechaDesde" label="Fecha desde" density="compact" variant="outlined"
+          type="date" hide-details prepend-inner-icon="mdi-calendar-start" clearable @update:model-value="aplicarFiltros" />
+      </v-col>
+      <v-col cols="12" sm="6" md="2">
+        <v-text-field v-model="filtros.fechaHasta" label="Fecha hasta" density="compact" variant="outlined"
+          type="date" hide-details prepend-inner-icon="mdi-calendar-end" clearable @update:model-value="aplicarFiltros" />
+      </v-col>
     </v-row>
 
     <v-row>
@@ -330,6 +338,7 @@ const TRANSICIONES_BASE: Record<string, string[]> = {
   'AUTORIZADO':                 ['EMPACADO', 'CANCELADO'],
   'OK':                         ['CANCELADO'],
   'EMPACADO':                   ['FINALIZADO'],
+  'ICG':                        ['CANCELADO'],
 };
 
 // Filtra las opciones según permisos del usuario actual
@@ -359,7 +368,7 @@ const estatusOpciones = [
 ];
 
 const zonas  = ref<{ zona: string; display: string }[]>([]);
-const filtros = ref({ buscarId: '', clienteId: '', codVendedor: '', estatus: null as string | null, riesgo: null as string | null, codruta: null as string | null });
+const filtros = ref({ buscarId: '', clienteId: '', codVendedor: '', estatus: null as string | null, riesgo: null as string | null, codruta: null as string | null, fechaDesde: null as string | null, fechaHasta: null as string | null });
 
 let filtroTimer: ReturnType<typeof setTimeout> | null = null;
 const aplicarFiltros = () => {
@@ -375,8 +384,10 @@ const obtenerPedidos = async (page = 1, limit = 10) => {
     if (filtros.value.clienteId)  params.clienteId   = filtros.value.clienteId;
     if (filtros.value.codVendedor) params.codVendedor = filtros.value.codVendedor;
     if (filtros.value.estatus)    params.estatus     = filtros.value.estatus;
-    if (filtros.value.riesgo)     params.riesgo      = filtros.value.riesgo;
-    if (filtros.value.codruta)    params.codruta     = filtros.value.codruta;
+    if (filtros.value.riesgo)      params.riesgo      = filtros.value.riesgo;
+    if (filtros.value.codruta)     params.codruta     = filtros.value.codruta;
+    if (filtros.value.fechaDesde)  params.fechaDesde  = filtros.value.fechaDesde;
+    if (filtros.value.fechaHasta)  params.fechaHasta  = filtros.value.fechaHasta;
     const response = await axios.get(`${import.meta.env.VITE_API_URL}/pedidos`, { params });
     if (response.data.success) {
       pedidos.value = response.data.data;

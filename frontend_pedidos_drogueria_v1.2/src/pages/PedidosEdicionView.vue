@@ -518,7 +518,14 @@ const buscarProductos = async () => {
   resultadosBusqueda.value = [];
   try {
     const res = await axios.get(`${API}/products/get-products`, { params: { articulo: busquedaProducto.value.trim() } });
-    resultadosBusqueda.value = res.data.data ?? res.data ?? [];
+    const tarifa = lineasEditadas.value[0]?.IDTARIFAV || 1;
+    resultadosBusqueda.value = (res.data.data ?? res.data ?? []).map((p: any) => ({
+      ...p,
+      STOCK: p.STOCKTOTAL ?? 0,
+      PRECIO: p.prices?.find((pr: any) => pr.IDTARIFAV === tarifa)?.PNETO
+               ?? p.prices?.[0]?.PNETO
+               ?? 0,
+    }));
   } catch {
     lanzarNotificacion('Error al buscar productos', 'error');
   } finally {
@@ -530,8 +537,16 @@ const seleccionarProducto = async (producto: any) => {
   agregandoProducto.value = producto.CODARTICULO;
   try {
     const tarifa = lineasEditadas.value[0]?.IDTARIFAV || 1;
-    const res = await axios.get(`${API}/products/get-prices`, { params: { codarticulo: producto.CODARTICULO, tarifa } });
-    const precio = res.data.data?.[0]?.PNETO ?? res.data?.[0]?.PNETO ?? 0;
+    // Precio ya calculado en buscarProductos; si es 0 hacemos fetch de respaldo
+    let precio = Number(producto.PRECIO || 0);
+    if (!precio) {
+      const res = await axios.get(`${API}/products/get-prices`, { params: { codarticulo: producto.CODARTICULO, tarifa } });
+      precio = res.data.data?.[0]?.PNETO ?? res.data?.[0]?.PNETO ?? 0;
+    }
+    // Aplicar descuento del cliente igual que en catálogo (DESCUENTO1 del primer artículo del pedido)
+    const d1 = Number(lineasEditadas.value[0]?.DESCUENTO1 || 0);
+    const precioConDto = d1 > 0 ? precio * (1 - d1 / 100) : precio;
+
     const yaExiste = lineasEditadas.value.find(l => l.CODARTICULO === producto.CODARTICULO);
     if (yaExiste) {
       yaExiste.PRODUCTCOUNT += 1;
@@ -543,9 +558,9 @@ const seleccionarProducto = async (producto: any) => {
         CODALMACEN:     lineasEditadas.value[0]?.CODALMACEN || 'ZAV',
         IDTARIFAV:      tarifa,
         PRECIOBRUTO:    precio,
-        PRECIOUNITARIO: precio,
+        PRECIOUNITARIO: precioConDto,
         PRODUCTCOUNT:   1,
-        DESCUENTO1: 0, DESCUENTO2: 0, DESCUENTO3: 0, DESCUENTO4: 0,
+        DESCUENTO1: d1, DESCUENTO2: 0, DESCUENTO3: 0, DESCUENTO4: 0,
       });
     }
     lanzarNotificacion(`${producto.DESCRIPCION} añadido`, 'success');
