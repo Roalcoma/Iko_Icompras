@@ -363,6 +363,63 @@ export class PedidosServices {
         }
     }
 
+    static async getConteo(orderId: string) {
+        try {
+            const pool = await connectDb();
+            const result = await pool.request()
+                .input('ORDERID', mssql.VarChar(50), orderId)
+                .query(`
+                    SELECT
+                        PC.IDCONTEO,
+                        CONVERT(VARCHAR(16), PC.FECHA, 120)  AS FECHA_CONTEO,
+                        PC.ESTADO                            AS ESTADO_CONTEO,
+                        RTRIM(PC.ESTADOPED)                  AS ESTADOPED,
+                        LP.CODARTICULO,
+                        ACL.DESCRIPCIONLARGA                 AS DESCRIPCION,
+                        LP.PRODUCTCOUNT                      AS CANTPEDIDA,
+                        ISNULL(CL.UNIDADES, 0)               AS CANTCONTADA,
+                        LP.PRECIOUNITARIO
+                    FROM ${esquema}.LINEA_PED LP WITH(NOLOCK)
+                    LEFT JOIN ARTICULOSCAMPOSLIBRES ACL WITH(NOLOCK) ON ACL.CODARTICULO = LP.CODARTICULO
+                    OUTER APPLY (
+                        SELECT TOP 1 PC2.IDCONTEO, PC2.FECHA, PC2.ESTADO, PC2.ESTADOPED
+                        FROM PEDIDOS_CONTEOS PC2 WITH(NOLOCK)
+                        WHERE PC2.IDPEDIDO COLLATE DATABASE_DEFAULT
+                            = CAST(LP.ORDERID AS NVARCHAR(50)) COLLATE DATABASE_DEFAULT
+                        ORDER BY PC2.FECHA DESC
+                    ) PC
+                    LEFT JOIN CONTEOSLIN CL WITH(NOLOCK)
+                        ON  CL.IDCONTEO COLLATE DATABASE_DEFAULT = PC.IDCONTEO COLLATE DATABASE_DEFAULT
+                        AND CL.CODARTICULO = LP.CODARTICULO
+                    WHERE LP.ORDERID = @ORDERID
+                    ORDER BY ACL.DESCRIPCIONLARGA
+                `);
+
+            const rows = result.recordset;
+            if (!rows.length) return { success: true, data: null };
+
+            return {
+                success: true,
+                data: {
+                    idConteo:     rows[0].IDCONTEO    ?? null,
+                    fechaConteo:  rows[0].FECHA_CONTEO ?? null,
+                    estadoConteo: rows[0].ESTADO_CONTEO ?? null,
+                    estadoPed:    rows[0].ESTADOPED    ?? null,
+                    lineas: rows.map((l: any) => ({
+                        codarticulo: l.CODARTICULO,
+                        descripcion: l.DESCRIPCION || '',
+                        cantPedida:  Number(l.CANTPEDIDA),
+                        cantContada: Number(l.CANTCONTADA),
+                        precio:      Number(l.PRECIOUNITARIO),
+                    }))
+                }
+            };
+        } catch (error) {
+            console.error('Error al obtener conteo:', error);
+            return { success: false, message: error instanceof Error ? error.message : String(error) };
+        }
+    }
+
     static async getPedidoById(orderId: string) {
         try {
             const pool = await connectDb();

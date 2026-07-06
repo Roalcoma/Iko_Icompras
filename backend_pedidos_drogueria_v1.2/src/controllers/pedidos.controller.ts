@@ -35,6 +35,17 @@ export class PedidosControllers {
         }
     }
 
+    static async getConteo(req: Request, res: Response) {
+        try {
+            const { orderId } = req.query;
+            if (!orderId) return res.status(400).json({ success: false, message: 'orderId requerido' });
+            const result = await PedidosServices.getConteo(orderId as string);
+            return res.status(result.success ? 200 : 500).json(result);
+        } catch (error) {
+            return res.status(500).json({ success: false, message: 'Error al obtener conteo' });
+        }
+    }
+
     static async getPedidos(req: Request, res: Response) {
         try {
             const { orderId, buscarId, estatus, page, limit } = req.query;

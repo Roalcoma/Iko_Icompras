@@ -15,6 +15,20 @@ export interface LineaPDF {
     porcentajeIva?: number;
 }
 
+export interface LineaConteoPDF {
+    codarticulo: string | number;
+    descripcion: string;
+    cantPedida: number;
+    cantContada: number;
+    precio: number;
+}
+
+export interface ConteoPDFData {
+    fechaConteo?: string | null;
+    estadoConteo?: string | null;
+    lineas: LineaConteoPDF[];
+}
+
 export interface PedidoPDFData {
     numeroOrden: string;
     fecha?: string;
@@ -31,6 +45,7 @@ export interface PedidoPDFData {
     totalIVA?: number;
     ocultarPrecios?: boolean;
     firmante?: { usuario: string; fecha: string };
+    conteo?: ConteoPDFData;
 }
 
 export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
@@ -173,6 +188,53 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
         doc.text(data.firmante.usuario, 14, firmaY + 5);
         doc.setFont('helvetica', 'normal');
         doc.text(`Emitido: ${data.firmante.fecha}`, 14, firmaY + 10);
+    }
+
+    // --- Sección de conteo (solo si viene data) ---
+    if (data.conteo) {
+        const conteoStartY = (doc as any).lastAutoTable.finalY + (data.firmante ? 20 : 10);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('CONTEO DE ALMACÉN', 14, conteoStartY);
+        if (data.conteo.fechaConteo) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.text(`Fecha conteo: ${data.conteo.fechaConteo}   Estado: ${data.conteo.estadoConteo ?? '—'}`, 14, conteoStartY + 6);
+        }
+        autoTable(doc, {
+            startY: conteoStartY + 10,
+            head: [['Código', 'Descripción', 'Pedido', 'Contado', 'Dif.', 'Precio Unit.']],
+            body: data.conteo.lineas.map(l => {
+                const dif = l.cantContada - l.cantPedida;
+                return [
+                    l.codarticulo,
+                    l.descripcion,
+                    l.cantPedida,
+                    l.cantContada,
+                    dif === 0 ? '—' : (dif > 0 ? `+${dif}` : String(dif)),
+                    l.precio.toFixed(2),
+                ];
+            }),
+            theme: 'plain',
+            styles: { fontSize: 7, cellPadding: 1 },
+            headStyles: { fillColor: [230, 245, 255], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1 },
+            bodyStyles: { lineWidth: 0.05 },
+            columnStyles: {
+                0: { cellWidth: 18 },
+                1: { cellWidth: 80 },
+                2: { halign: 'center' as const, cellWidth: 18 },
+                3: { halign: 'center' as const, cellWidth: 18 },
+                4: { halign: 'center' as const, cellWidth: 14 },
+                5: { halign: 'right'  as const },
+            },
+            didParseCell: (hookData: any) => {
+                if (hookData.section === 'body' && hookData.column.index === 4) {
+                    const v = String(hookData.cell.raw);
+                    if (v.startsWith('+')) hookData.cell.styles.textColor = [0, 150, 0];
+                    else if (v.startsWith('-')) hookData.cell.styles.textColor = [200, 0, 0];
+                }
+            },
+        });
     }
 
     // Copyright footer

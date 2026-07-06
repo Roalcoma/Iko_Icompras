@@ -199,6 +199,15 @@
                   @click="pedidoAEliminar = item; dialogEliminar = true"
                 ></v-btn>
                 <v-btn
+                  v-if="item.ESTATUS === 'OK'"
+                  icon="mdi-eye-outline"
+                  variant="text"
+                  size="small"
+                  color="teal-darken-2"
+                  :loading="conteoModal.loadingId === item.ORDERID"
+                  @click="verConteo(item)"
+                ></v-btn>
+                <v-btn
                   icon="mdi-file-pdf-box"
                   variant="text"
                   size="small"
@@ -294,6 +303,66 @@
       </v-card>
     </v-dialog>
 
+    <!-- Modal visor de conteo -->
+    <v-dialog v-model="conteoModal.show" max-width="800">
+      <v-card class="rounded-xl">
+        <v-card-title class="pa-4 bg-teal-darken-2 text-white d-flex align-center">
+          <v-icon start>mdi-clipboard-check-outline</v-icon>
+          Conteo de Almacén — Pedido #{{ conteoModal.orderId }}
+          <v-spacer />
+          <v-chip v-if="conteoModal.data" size="small" variant="flat" color="white" class="text-teal-darken-2 font-weight-bold">
+            {{ conteoModal.data.estadoConteo }}
+          </v-chip>
+        </v-card-title>
+
+        <v-card-text class="pa-4">
+          <div v-if="!conteoModal.data" class="text-center text-grey pa-6">
+            Sin datos de conteo para este pedido.
+          </div>
+          <template v-else>
+            <div class="text-caption text-grey mb-3">Fecha conteo: {{ conteoModal.data.fechaConteo ?? '—' }}</div>
+            <v-table density="compact" hover>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Descripción</th>
+                  <th class="text-center">Pedido</th>
+                  <th class="text-center">Contado</th>
+                  <th class="text-center">Dif.</th>
+                  <th class="text-right">Precio</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="l in conteoModal.data.lineas" :key="l.codarticulo"
+                    :class="l.cantContada !== l.cantPedida ? 'bg-orange-lighten-5' : ''">
+                  <td class="text-caption">{{ l.codarticulo }}</td>
+                  <td>{{ l.descripcion }}</td>
+                  <td class="text-center font-weight-bold">{{ l.cantPedida }}</td>
+                  <td class="text-center font-weight-bold">{{ l.cantContada }}</td>
+                  <td class="text-center font-weight-bold"
+                      :class="l.cantContada - l.cantPedida > 0 ? 'text-success' : l.cantContada - l.cantPedida < 0 ? 'text-error' : 'text-grey'">
+                    {{ l.cantContada - l.cantPedida === 0 ? '—' : (l.cantContada - l.cantPedida > 0 ? '+' : '') + (l.cantContada - l.cantPedida) }}
+                  </td>
+                  <td class="text-right text-caption">$ {{ l.precio.toFixed(2) }}</td>
+                </tr>
+              </tbody>
+            </v-table>
+
+            <v-divider class="my-3" />
+            <div class="d-flex justify-end gap-6 text-body-2">
+              <span>Total pedido: <strong>{{ conteoModal.data.lineas.reduce((s, l) => s + l.cantPedida, 0) }}</strong> uds</span>
+              <span class="ml-4">Total contado: <strong>{{ conteoModal.data.lineas.reduce((s, l) => s + l.cantContada, 0) }}</strong> uds</span>
+            </div>
+          </template>
+        </v-card-text>
+
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" @click="conteoModal.show = false">Cerrar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" rounded="pill">
       {{ snackbar.text }}
     </v-snackbar>
@@ -304,7 +373,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
 import { useRouter } from 'vue-router';
-import { generarPedidoPDF } from '../utils/pedidoPDF';
+import { generarPedidoPDF, type ConteoPDFData } from '../utils/pedidoPDF';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useCarritoStore } from '../stores/useCarritoStore';
 import MontoDisplay from '../components/MontoDisplay.vue';
@@ -331,6 +400,24 @@ const eliminando      = ref(false);
 
 const riesgosMap = ref<Record<number, any>>({});
 const modalRiesgo = ref({ show: false, data: null as any });
+
+const conteoModal = ref<{ show: boolean; loadingId: string | null; orderId: string; data: any }>({
+    show: false, loadingId: null, orderId: '', data: null
+});
+
+const verConteo = async (item: any) => {
+    conteoModal.value.loadingId = item.ORDERID;
+    try {
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/pedidos/conteo`, { params: { orderId: item.ORDERID } });
+        conteoModal.value.data    = res.data.data ?? null;
+        conteoModal.value.orderId = item.ORDERID;
+        conteoModal.value.show    = true;
+    } catch {
+        lanzarNotificacion('Error al cargar conteo', 'error');
+    } finally {
+        conteoModal.value.loadingId = null;
+    }
+};
 
 const TRANSICIONES_BASE: Record<string, string[]> = {
   'PENDIENTE':                  ['PENDIENTE POR AUTORIZACION', 'AUTORIZADO', 'CANCELADO'],
@@ -516,12 +603,27 @@ const irAEdicion = (item: any) => {
 const imprimirPDF = async (item: any) => {
   pdfCargando.value = item.ORDERID;
   try {
-    const res = await axios.get(`${import.meta.env.VITE_API_URL}/pedidos?orderId=${item.ORDERID}`);
-    if (!res.data.success) { lanzarNotificacion('No se pudo cargar el pedido', 'error'); return; }
+    const [pedidoRes, conteoRes] = await Promise.all([
+      axios.get(`${import.meta.env.VITE_API_URL}/pedidos?orderId=${item.ORDERID}`),
+      item.ESTATUS === 'OK'
+        ? axios.get(`${import.meta.env.VITE_API_URL}/pedidos/conteo`, { params: { orderId: item.ORDERID } })
+        : Promise.resolve(null),
+    ]);
 
-    const pedido = res.data.data;
+    if (!pedidoRes.data.success) { lanzarNotificacion('No se pudo cargar el pedido', 'error'); return; }
+
+    const pedido = pedidoRes.data.data;
     const lineas = pedido.lineas || [];
     const cliente = riesgosMap.value[item.CLIENTEID];
+
+    let conteo: ConteoPDFData | undefined;
+    if (conteoRes?.data?.success && conteoRes.data.data) {
+      conteo = {
+        fechaConteo:  conteoRes.data.data.fechaConteo,
+        estadoConteo: conteoRes.data.data.estadoConteo,
+        lineas:       conteoRes.data.data.lineas,
+      };
+    }
 
     await generarPedidoPDF({
       numeroOrden: item.ORDERID,
@@ -547,6 +649,7 @@ const imprimirPDF = async (item: any) => {
       })),
       totalUSD: lineas.reduce((s: number, l: any) => s + Number(l.PRECIOUNITARIO) * Number(l.PRODUCTCOUNT), 0),
       totalIVA: lineas.reduce((s: number, l: any) => s + Number(l.MONTOIVA ?? 0), 0),
+      conteo,
     });
   } catch {
     lanzarNotificacion('Error al generar el PDF', 'error');

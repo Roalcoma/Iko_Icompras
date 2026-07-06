@@ -18,6 +18,8 @@ pedidosRouter.put('/status', authMiddleware, PedidosControllers.updatePedidoStat
 
 pedidosRouter.put('/aprobar-psicotropico', authMiddleware, PedidosControllers.aprobarPsicotropico)
 
+pedidosRouter.get('/conteo', PedidosControllers.getConteo)
+
 pedidosRouter.get('/auditoria', authMiddleware, PedidosControllers.getAuditoria)
 
 export default pedidosRouter
