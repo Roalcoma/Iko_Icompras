@@ -107,7 +107,7 @@
                 <span class="font-weight-black text-primary">#{{ item.ORDERID }}</span>
                 <v-chip v-if="item.ORDERID?.startsWith('EC-')" size="x-small" color="teal-darken-1"
                   variant="flat" prepend-icon="mdi-shopping" class="font-weight-bold">
-                  EC
+                  Icompras
                 </v-chip>
                 <v-tooltip v-if="item.OBSERVACIONES" location="top">
                   <template #activator="{ props }">

@@ -21,7 +21,7 @@
           <strong>{{ m.bit }}</strong> — {{ m.nombre }}
         </v-chip>
         <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-star">
-          <strong>16383</strong> — Acceso total (todos los módulos)
+          <strong>15871</strong> — Acceso total (todos los módulos)
         </v-chip>
       </div>
     </v-card>
@@ -458,12 +458,12 @@
     <v-card rounded="xl" elevation="2" class="mt-6">
       <v-card-title class="pa-4 d-flex align-center">
         <v-icon color="primary" class="mr-2">mdi-shopping</v-icon>
-        <span class="font-weight-bold">Integración Ecommerce — Ruta de archivos</span>
+        <span class="font-weight-bold">Integración Icompras — Ruta de archivos</span>
       </v-card-title>
       <v-divider />
       <v-card-text class="pa-4">
         <p class="text-caption text-grey mb-3">
-          Carpeta donde el ecommerce deposita los archivos .txt de pedidos. El sistema la escanea cada 60 segundos
+          Carpeta donde Icompras deposita los archivos .txt de pedidos. El sistema la escanea cada 30 segundos
           automáticamente. Los archivos procesados se renombran a .txt.done.
         </p>
         <div class="d-flex align-center gap-3">
@@ -532,7 +532,6 @@ const MODULOS = [
   { bit: 64, codigo: 'CLIENTES',   nombre: 'Gestión Clientes', icono: 'mdi-account-group' },
   { bit: 128, codigo: 'APROBACION_PSICO', nombre: 'Aprobación Psicotrópicos', icono: 'mdi-shield-alert' },
   { bit: 256, codigo: 'RECLAMOS',   nombre: 'Reclamos',           icono: 'mdi-comment-alert' },
-  { bit: 512,  codigo: 'ECOMMERCE',   nombre: 'Pedidos Ecommerce',        icono: 'mdi-shopping'             },
   { bit: 1024, codigo: 'AUDITORIA',   nombre: 'Auditoría',                icono: 'mdi-clipboard-text-clock' },
   { bit: 2048, codigo: 'AUTORIZADOR', nombre: 'Puede autorizar pedidos',  icono: 'mdi-check-decagram'       },
   { bit: 4096, codigo: 'RUTERO',              nombre: 'Rutero de Entrega',        icono: 'mdi-truck-delivery' },

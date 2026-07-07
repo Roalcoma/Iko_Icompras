@@ -23,7 +23,6 @@ export const MODULOS_SISTEMA = [
     { bit: 64,   codigo: 'CLIENTES',          nombre: 'Gestión Clientes',            ruta: '/gestion-clientes',        icono: 'mdi-account-group',         orden: 7  },
     { bit: 128,  codigo: 'APROBACION_PSICO',  nombre: 'Aprobación Psicotrópicos',    ruta: '/aprobacion-psicotropicos', icono: 'mdi-shield-alert',         orden: 8  },
     { bit: 256,  codigo: 'RECLAMOS',          nombre: 'Reclamos',                    ruta: '/reclamos',                icono: 'mdi-comment-alert',         orden: 9  },
-    { bit: 512,  codigo: 'ECOMMERCE',         nombre: 'Pedidos Ecommerce',           ruta: '/ecommerce',               icono: 'mdi-shopping',              orden: 10 },
     { bit: 1024, codigo: 'AUDITORIA',         nombre: 'Auditoría',                   ruta: '/auditoria',               icono: 'mdi-clipboard-text-clock',  orden: 11 },
     { bit: 2048, codigo: 'AUTORIZADOR',       nombre: 'Puede autorizar pedidos',     ruta: '',                         icono: 'mdi-check-decagram',        orden: 12 },
     { bit: 4096, codigo: 'RUTERO',            nombre: 'Rutero de Entrega',           ruta: '/rutero',                  icono: 'mdi-truck-delivery',        orden: 13 },

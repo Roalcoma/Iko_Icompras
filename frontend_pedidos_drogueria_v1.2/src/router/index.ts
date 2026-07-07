@@ -10,7 +10,6 @@ import PromocionesView    from '../pages/PromocionesView.vue';
 import ClientesAdminView  from '../pages/ClientesAdminView.vue';
 import AprobacionPsicotropicosView from '../pages/AprobacionPsicotropicosView.vue';
 import ReclamosView       from '../pages/ReclamosView.vue';
-import EcommerceView      from '../pages/EcommerceView.vue';
 import AuditoriaView      from '../pages/AuditoriaView.vue';
 import RuteroView             from '../pages/RuteroView.vue';
 import FacturasImpresionView  from '../pages/FacturasImpresionView.vue';
@@ -28,7 +27,6 @@ const router = createRouter({
     { path: '/gestion-clientes', name: 'gestion-clientes',component: ClientesAdminView,  meta: { ruta: '/gestion-clientes' } },
     { path: '/aprobacion-psicotropicos', name: 'aprobacion-psicotropicos', component: AprobacionPsicotropicosView, meta: { ruta: '/aprobacion-psicotropicos' } },
     { path: '/reclamos',         name: 'reclamos',        component: ReclamosView,       meta: { ruta: '/reclamos' } },
-    { path: '/ecommerce',        name: 'ecommerce',       component: EcommerceView,      meta: { ruta: '/ecommerce' } },
     { path: '/auditoria',        name: 'auditoria',       component: AuditoriaView,      meta: { ruta: '/auditoria' } },
     { path: '/rutero',              name: 'rutero',              component: RuteroView,            meta: { ruta: '/rutero' } },
     { path: '/facturas-impresion',  name: 'facturas-impresion',  component: FacturasImpresionView, meta: { ruta: '/facturas-impresion' } },
