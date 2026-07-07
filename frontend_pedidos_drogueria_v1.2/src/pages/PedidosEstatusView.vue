@@ -671,9 +671,9 @@ const imprimirPDF = async (item: any) => {
       cliente: {
         codcliente: item.CLIENTEID,
         nombrecliente: cliente?.NOMBRECLIENTE || `Cliente ${item.CLIENTEID}`,
-        nit: cliente?.CIF,
-        direccionFiscal: cliente?.DIRECCION || '',
-        direccionEnvio:  cliente?.DIRECCION || '',
+        nit: item.NIF20 || item.CIF || '',
+        direccionFiscal: item.DIRECCION1 || '',
+        direccionEnvio:  item.RUTA || '',
       },
       lineas: lineas.map((l: any) => ({
         codigo: l.CODARTICULO,

@@ -90,17 +90,19 @@ export class ClientesServices {
                             ISNULL(CL.CODCLIENTE, 0) CODCLIENTE,
                             ISNULL(CL.NIF20, 0) ID,
                             ISNULL(CL.CIF, '') NIT,
+                            ISNULL(CL.NIF20, '') NIF20,
                             ISNULL(CL.TELEFONO1, '') TELF,
                             ISNULL(CL.E_MAIL, '') EMAIL,
                             ISNULL(CL.DIRECCION1, '') DIRECCION,
                             ISNULL(CL.DIRECCION1, '') DIRECCION_FISCAL,
-                            ISNULL(CL.DIRECCION1, '') DIRECCION_ENVIO,
+                            ISNULL(RUT.DESCRIPCION, '') DIRECCION_ENVIO,
                             ISNULL(TRY_CAST(CCL.D1 AS FLOAT), 0) DESCUENTO,
                             ISNULL((SELECT TOP 1 CG.PORCENTAJE_DESCUENTO FROM CTE_GRUPOCLIENTES CG WHERE CL.CODCLIENTE = CG.CODCLIENTE AND Regla_Aplicada = 'D3'), 0) DESCUENTO2,
                             ISNULL((SELECT TOP 1 CG.PORCENTAJE_DESCUENTO FROM CTE_GRUPOCLIENTES CG WHERE CL.CODCLIENTE = CG.CODCLIENTE AND Regla_Aplicada = 'D4'), 0) DESCUENTO3
                         FROM
                             CLIENTES CL
                             LEFT JOIN CLIENTESCAMPOSLIBRES CCL ON CL.CODCLIENTE = CCL.CODCLIENTE
+                            LEFT JOIN RUTAS RUT ON RUT.CODRUTA = TRY_CAST(CCL.ZONA AS INT)
                         WHERE 
                             (UPPER(ISNULL(CL.NOMBRECLIENTE, '')) LIKE ('%'+UPPER(REPLACE(LTRIM(RTRIM(@CIF)),' ','%'))+'%')
                             OR UPPER(ISNULL(CL.CIF, '')) LIKE ('%'+UPPER(REPLACE(LTRIM(RTRIM(@CIF)),' ','%'))+'%')
