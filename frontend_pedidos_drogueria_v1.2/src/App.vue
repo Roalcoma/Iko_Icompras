@@ -20,7 +20,7 @@
 
       <v-list density="comfortable" nav class="px-3">
         <v-list-item
-          v-for="modulo in authStore.modulosVisibles"
+          v-for="modulo in authStore.modulosVisibles.filter(m => !m.ruta || router.getRoutes().some(r => r.path === m.ruta))"
           :key="modulo.codigo"
           :to="modulo.ruta"
           :prepend-icon="modulo.icono"

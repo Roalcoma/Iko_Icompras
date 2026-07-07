@@ -709,7 +709,13 @@ const escanearAhora = async () => {
   escaneando.value = true;
   try {
     const res = await axios.post(`${API_ECO}/escanear`);
-    mostrarSnack(`Escaneo completo — Importados: ${res.data.importados}, Errores: ${res.data.errores}`, 'success');
+    const d = res.data;
+    if (d.mensaje && d.importados === 0 && d.errores === 0) {
+      mostrarSnack(d.mensaje, 'warning');
+    } else {
+      const color = d.errores > 0 ? 'warning' : 'success';
+      mostrarSnack(`Escaneo completo — Importados: ${d.importados}, Errores: ${d.errores}`, color);
+    }
   } catch (err: any) {
     mostrarSnack(err.response?.data?.message ?? 'Error al escanear', 'error');
   } finally { escaneando.value = false; }

@@ -100,11 +100,14 @@ export class EcommerceService {
         return pedido ? { pedido, lineas: items } : null;
     }
 
-    static async escanearCarpeta(): Promise<{ importados: number; errores: number }> {
+    static async escanearCarpeta(): Promise<{ importados: number; errores: number; mensaje?: string }> {
         const ruta = await this.getConfig();
-        if (!ruta || !fs.existsSync(ruta)) return { importados: 0, errores: 0 };
+        if (!ruta) return { importados: 0, errores: 0, mensaje: 'Ruta de carpeta no configurada en Administración' };
+        if (!fs.existsSync(ruta)) return { importados: 0, errores: 0, mensaje: `Carpeta no encontrada: ${ruta}` };
 
         const archivos = fs.readdirSync(ruta).filter(f => f.endsWith('.txt'));
+        if (!archivos.length) return { importados: 0, errores: 0, mensaje: `Sin archivos .txt pendientes en: ${ruta}` };
+
         let importados = 0, errores = 0;
 
         for (const archivo of archivos) {
@@ -172,14 +175,14 @@ export class EcommerceService {
 
                 // Auto-aprobar: insertar directamente en CABECERA_PED
                 const aprob = await this.aprobarPedido(idPedido);
+                fs.renameSync(rutaArchivo, rutaArchivo + '.done');
                 if (aprob.success) {
                     console.log(`[Ecommerce] Pedido ${aprob.orderId} creado en Control de Estatus`);
+                    importados++;
                 } else {
-                    console.warn(`[Ecommerce] ${archivo}: no se pudo aprobar — ${aprob.message}`);
+                    console.warn(`[Ecommerce] ${archivo}: no se pudo crear en Control de Estatus — ${aprob.message}`);
+                    errores++;
                 }
-
-                fs.renameSync(rutaArchivo, rutaArchivo + '.done');
-                importados++;
             } catch (e) {
                 console.error(`[Ecommerce] Error al importar ${archivo}:`, e);
                 errores++;
