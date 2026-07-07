@@ -226,6 +226,7 @@ import { ref, computed, onMounted, reactive } from 'vue';
 import axios from 'axios';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import logoUrl from '../assets/drogueria_logo.png';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -415,7 +416,7 @@ const generarPDF = (numero: string, zonaDisplay: string, lista: any[]) => {
   const fecha = new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
   const logo  = new Image();
-  logo.src    = '/src/assets/drogueria_logo.png';
+  logo.src    = logoUrl;
 
   const build = () => {
     const addHeader = (pageNum: number, totalPages: number) => {
@@ -473,8 +474,10 @@ const generarPDF = (numero: string, zonaDisplay: string, lista: any[]) => {
 
       // Filas de facturas
       for (const f of items) {
+        const facturaText = f.FACTURA_VISUAL ?? `${f.NUMSERIE}-${f.NUMFACTURA}`;
+        const pedidoText  = f.PEDIDO ? `Ped: ${f.PEDIDO}` : '';
         body.push([
-          f.FACTURA_VISUAL ?? `${f.NUMSERIE}-${f.NUMFACTURA}`,
+          { content: pedidoText ? `${facturaText}\n${pedidoText}` : facturaText, styles: { fontSize: 7 } },
           { content: String(f.BULTOS ?? 0), styles: { halign: 'center' } },
           { content: '1', styles: { halign: 'center' } },
           { content: '0', styles: { halign: 'center' } },

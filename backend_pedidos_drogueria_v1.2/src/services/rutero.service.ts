@@ -29,7 +29,22 @@ export class RuteroService {
             `);
             console.log('Tablas de rutero verificadas (BD rutero).');
         } catch (err) {
-            console.error('Advertencia en RuteroService.initTablas:', err);
+            console.error('Advertencia en RuteroService.initTablas (BD rutero):', err);
+        }
+
+        // Migración: FECHARECIBIDO en DROGUERIA..FACTURASVENTACAMPOSLIBRES (usada por getFacturas y confirmarFacturaRutero)
+        try {
+            const pool = await connectDb();
+            await pool.request().query(`
+                IF NOT EXISTS (
+                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_NAME = 'FACTURASVENTACAMPOSLIBRES' AND COLUMN_NAME = 'FECHARECIBIDO'
+                )
+                ALTER TABLE FACTURASVENTACAMPOSLIBRES ADD FECHARECIBIDO DATETIME NULL
+            `);
+            console.log('Columna FECHARECIBIDO verificada en FACTURASVENTACAMPOSLIBRES.');
+        } catch (err) {
+            console.error('Advertencia en RuteroService.initTablas (FECHARECIBIDO):', err);
         }
     }
 
@@ -67,7 +82,16 @@ export class RuteroService {
                            AND AV.NUMALBARAN = PV.NUMEROALBARAN
                         WHERE AV.NUMSERIEFAC COLLATE DATABASE_DEFAULT = FV.NUMSERIE COLLATE DATABASE_DEFAULT
                           AND AV.NUMFAC = FV.NUMFACTURA
-                    ) AS BULTOS
+                    ) AS BULTOS,
+                    (
+                        SELECT TOP 1 PV2.SUPEDIDO
+                        FROM ALBVENTACAB AV2 WITH(NOLOCK)
+                        INNER JOIN PEDVENTACAB PV2 WITH(NOLOCK)
+                            ON PV2.SERIEALBARAN COLLATE DATABASE_DEFAULT = AV2.NUMSERIE COLLATE DATABASE_DEFAULT
+                           AND PV2.NUMEROALBARAN = AV2.NUMALBARAN
+                        WHERE AV2.NUMSERIEFAC COLLATE DATABASE_DEFAULT = FV.NUMSERIE COLLATE DATABASE_DEFAULT
+                          AND AV2.NUMFAC = FV.NUMFACTURA
+                    ) AS PEDIDO
     `;
 
     static async getFacturas(zona: string): Promise<any[]> {
@@ -220,7 +244,16 @@ export class RuteroService {
                        AND AV.NUMALBARAN = PV.NUMEROALBARAN
                     WHERE AV.NUMSERIEFAC COLLATE DATABASE_DEFAULT = FV.NUMSERIE COLLATE DATABASE_DEFAULT
                       AND AV.NUMFAC = FV.NUMFACTURA
-                ) AS BULTOS
+                ) AS BULTOS,
+                (
+                    SELECT TOP 1 PV2.SUPEDIDO
+                    FROM ALBVENTACAB AV2 WITH(NOLOCK)
+                    INNER JOIN PEDVENTACAB PV2 WITH(NOLOCK)
+                        ON PV2.SERIEALBARAN COLLATE DATABASE_DEFAULT = AV2.NUMSERIE COLLATE DATABASE_DEFAULT
+                       AND PV2.NUMEROALBARAN = AV2.NUMALBARAN
+                    WHERE AV2.NUMSERIEFAC COLLATE DATABASE_DEFAULT = FV.NUMSERIE COLLATE DATABASE_DEFAULT
+                      AND AV2.NUMFAC = FV.NUMFACTURA
+                ) AS PEDIDO
             FROM FACTURASVENTA FV WITH(NOLOCK)
             LEFT JOIN CLIENTES CL WITH(NOLOCK)
                 ON CL.CODCLIENTE = FV.CODCLIENTE

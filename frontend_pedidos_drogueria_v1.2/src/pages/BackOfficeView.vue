@@ -247,6 +247,9 @@
             <v-text-field v-model="dbCfg.dbPruebas"     label="BD de pruebas"      variant="outlined" density="compact" hide-details class="mb-2" />
           </v-col>
           <v-col cols="12" sm="4">
+            <v-text-field v-model="dbCfg.dbRutero"      label="BD rutero"          variant="outlined" density="compact" hide-details class="mb-2" placeholder="ej: RUTERO" />
+          </v-col>
+          <v-col cols="12" sm="4">
             <v-text-field v-model="dbCfg.esquema"       label="Esquema SQL"        variant="outlined" density="compact" hide-details class="mb-2" />
           </v-col>
           <v-col cols="12" sm="6">
@@ -715,7 +718,7 @@ const escanearAhora = async () => {
 
 // ─── Configuración BD ─────────────────────────────────────────
 const API_SIS = `${import.meta.env.VITE_API_URL}/sistema`;
-const dbCfg = ref({ server: '', port: 1433, user: '', password: '', dbName: '', dbGeneralName: '', dbPruebas: '', esquema: 'dbo' });
+const dbCfg = ref({ server: '', port: 1433, user: '', password: '', dbName: '', dbGeneralName: '', dbPruebas: '', dbRutero: '', esquema: 'dbo' });
 const probandoConexion  = ref(false);
 const guardandoDbCfg    = ref(false);
 const estadoConexion    = ref<{ ok: boolean; mensaje: string } | null>(null);
@@ -725,7 +728,7 @@ const cargarDbConfig = async () => {
     const res = await axios.get(`${API_SIS}/db-config`);
     if (res.data.success) {
       const c = res.data.config;
-      dbCfg.value = { server: c.server, port: c.port, user: c.user, password: '', dbName: c.dbName, dbGeneralName: c.dbGeneralName, dbPruebas: c.dbPruebas, esquema: c.esquema };
+      dbCfg.value = { server: c.server, port: c.port, user: c.user, password: '', dbName: c.dbName, dbGeneralName: c.dbGeneralName, dbPruebas: c.dbPruebas, dbRutero: c.dbRutero ?? '', esquema: c.esquema };
     }
   } catch { /* silencioso */ }
 };
