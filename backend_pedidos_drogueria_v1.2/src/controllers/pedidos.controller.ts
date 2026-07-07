@@ -58,17 +58,18 @@ export class PedidosControllers {
             }
 
             // Lista paginada con filtros opcionales
-            const { clienteId, codVendedor, riesgo, codruta, fechaDesde, fechaHasta } = req.query;
+            const { clienteId, codVendedor, riesgo, codruta, fechaDesde, fechaHasta, esPsicotropico } = req.query;
             const result = await PedidosServices.getPedidos(
                 page, limit,
-                estatus     as string | undefined,
-                buscarId    as string | undefined,
-                clienteId   as string | undefined,
-                codVendedor as string | undefined,
-                riesgo      as string | undefined,
-                codruta     as string | undefined,
-                fechaDesde  as string | undefined,
-                fechaHasta  as string | undefined,
+                estatus         as string | undefined,
+                buscarId        as string | undefined,
+                clienteId       as string | undefined,
+                codVendedor     as string | undefined,
+                riesgo          as string | undefined,
+                codruta         as string | undefined,
+                fechaDesde      as string | undefined,
+                fechaHasta      as string | undefined,
+                esPsicotropico === '1' || esPsicotropico === 'true',
             );
             if (!result.success) return res.status(500).json(result);
             return res.status(200).json(result);

@@ -248,7 +248,7 @@ export class PedidosServices {
 
     static async getPedidos(page: any = 1, limit: any = 10, estatus?: string, buscarId?: string,
                              clienteId?: string, codVendedor?: string, riesgo?: string, codruta?: string,
-                             fechaDesde?: string, fechaHasta?: string) {
+                             fechaDesde?: string, fechaHasta?: string, esPsicotropico?: boolean) {
         try {
             let validPage = Math.max(1, Number(page) || 1);
             let validLimit = Math.max(1, Number(limit) || 10);
@@ -265,11 +265,13 @@ export class PedidosServices {
                 .input('RIESGO',       mssql.VarChar(20), riesgo     || null)
                 .input('CODRUTA',      mssql.Int,         codruta    ? Number(codruta)    : null)
                 .input('FECHA_DESDE',  mssql.Date,        fechaDesde || null)
-                .input('FECHA_HASTA',  mssql.Date,        fechaHasta || null);
+                .input('FECHA_HASTA',  mssql.Date,        fechaHasta || null)
+                .input('PSICO',        mssql.Bit,         esPsicotropico ? 1 : null);
 
             const result = await req.query(`
                 SELECT
                     CP.ORDERID, CP.CLIENTEID, CP.FECHA, CP.ESTATUS, CP.CODVENDEDOR, CP.TOTALPRECIO,
+                    CP.OBSERVACIONES,
                     CL.NOMBRECLIENTE,
                     V.NOMVENDEDOR,
                     CR.ESTATUS AS RIESGO_ESTATUS,
@@ -302,6 +304,7 @@ export class PedidosServices {
                     AND (@CODRUTA      IS NULL OR TRY_CAST(CLC.ZONA AS INT) = @CODRUTA)
                     AND (@FECHA_DESDE  IS NULL OR CAST(CP.FECHA AS DATE) >= @FECHA_DESDE)
                     AND (@FECHA_HASTA  IS NULL OR CAST(CP.FECHA AS DATE) <= @FECHA_HASTA)
+                    AND (@PSICO        IS NULL OR (@PSICO = 1 AND CP.OBSERVACIONES IS NOT NULL AND CP.OBSERVACIONES <> ''))
                 ORDER BY
                     CP.FECHA DESC
                 OFFSET @OFFSET ROWS
@@ -316,7 +319,8 @@ export class PedidosServices {
                 .input('RIESGO2',        mssql.VarChar(20), riesgo     || null)
                 .input('CODRUTA2',       mssql.Int,         codruta    ? Number(codruta)    : null)
                 .input('FECHA_DESDE2',   mssql.Date,        fechaDesde || null)
-                .input('FECHA_HASTA2',   mssql.Date,        fechaHasta || null);
+                .input('FECHA_HASTA2',   mssql.Date,        fechaHasta || null)
+                .input('PSICO2',         mssql.Bit,         esPsicotropico ? 1 : null);
 
             const countResult = await countReq.query(`
                 SELECT COUNT(*) AS TOTAL
@@ -344,6 +348,7 @@ export class PedidosServices {
                     AND (@CODRUTA2      IS NULL OR TRY_CAST(CLC.ZONA AS INT) = @CODRUTA2)
                     AND (@FECHA_DESDE2  IS NULL OR CAST(CP.FECHA AS DATE) >= @FECHA_DESDE2)
                     AND (@FECHA_HASTA2  IS NULL OR CAST(CP.FECHA AS DATE) <= @FECHA_HASTA2)
+                    AND (@PSICO2        IS NULL OR (@PSICO2 = 1 AND CP.OBSERVACIONES IS NOT NULL AND CP.OBSERVACIONES <> ''))
             `);
 
             return {

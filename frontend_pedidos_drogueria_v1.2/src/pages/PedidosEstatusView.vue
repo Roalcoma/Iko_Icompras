@@ -78,6 +78,16 @@
         <v-text-field v-model="filtros.fechaHasta" label="Fecha hasta" density="compact" variant="outlined"
           type="date" hide-details prepend-inner-icon="mdi-calendar-end" clearable @update:model-value="aplicarFiltros" />
       </v-col>
+      <v-col cols="12" sm="6" md="2" class="d-flex align-center">
+        <v-switch
+          v-model="filtros.esPsicotropico"
+          label="Solo Psicotrópicos"
+          color="purple-darken-2"
+          density="compact"
+          hide-details
+          @update:model-value="aplicarFiltros"
+        />
+      </v-col>
     </v-row>
 
     <v-row>
@@ -93,7 +103,20 @@
             @update:options="cargarPagina"
           >
             <template v-slot:item.ORDERID="{ item }">
-              <span class="font-weight-black text-primary">#{{ item.ORDERID }}</span>
+              <div class="d-flex align-center" style="gap:4px">
+                <span class="font-weight-black text-primary">#{{ item.ORDERID }}</span>
+                <v-tooltip v-if="item.OBSERVACIONES" location="top">
+                  <template #activator="{ props }">
+                    <v-chip v-bind="props" size="x-small" color="purple-darken-2" variant="flat"
+                      prepend-icon="mdi-shield-alert" class="font-weight-bold cursor-pointer">
+                      PSI
+                    </v-chip>
+                  </template>
+                  <div style="background:#000;color:#fff;padding:6px 10px;border-radius:4px;font-size:13px">
+                    Cód. aprobación: <strong>{{ item.OBSERVACIONES }}</strong>
+                  </div>
+                </v-tooltip>
+              </div>
             </template>
 
             <template v-slot:item.cliente_col="{ item }">
@@ -455,7 +478,7 @@ const estatusOpciones = [
 ];
 
 const zonas  = ref<{ zona: string; display: string }[]>([]);
-const filtros = ref({ buscarId: '', clienteId: '', codVendedor: '', estatus: null as string | null, riesgo: null as string | null, codruta: null as string | null, fechaDesde: null as string | null, fechaHasta: null as string | null });
+const filtros = ref({ buscarId: '', clienteId: '', codVendedor: '', estatus: null as string | null, riesgo: null as string | null, codruta: null as string | null, fechaDesde: null as string | null, fechaHasta: null as string | null, esPsicotropico: false });
 
 let filtroTimer: ReturnType<typeof setTimeout> | null = null;
 const aplicarFiltros = () => {
@@ -473,8 +496,9 @@ const obtenerPedidos = async (page = 1, limit = 10) => {
     if (filtros.value.estatus)    params.estatus     = filtros.value.estatus;
     if (filtros.value.riesgo)      params.riesgo      = filtros.value.riesgo;
     if (filtros.value.codruta)     params.codruta     = filtros.value.codruta;
-    if (filtros.value.fechaDesde)  params.fechaDesde  = filtros.value.fechaDesde;
-    if (filtros.value.fechaHasta)  params.fechaHasta  = filtros.value.fechaHasta;
+    if (filtros.value.fechaDesde)     params.fechaDesde     = filtros.value.fechaDesde;
+    if (filtros.value.fechaHasta)     params.fechaHasta     = filtros.value.fechaHasta;
+    if (filtros.value.esPsicotropico) params.esPsicotropico = '1';
     const response = await axios.get(`${import.meta.env.VITE_API_URL}/pedidos`, { params });
     if (response.data.success) {
       pedidos.value = response.data.data;
