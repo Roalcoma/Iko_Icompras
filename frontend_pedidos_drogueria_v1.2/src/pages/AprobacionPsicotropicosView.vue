@@ -142,12 +142,13 @@ const imprimirPDF = async (item: any, sinPrecios: boolean) => {
       numeroOrden: item.ORDERID,
       fecha: item.FECHA,
       estatus: item.ESTATUS,
+      esPsicotropico: true,
       cliente: {
         codcliente: item.CLIENTEID,
         nombrecliente: item.NOMBRECLIENTE || `Cliente ${item.CLIENTEID}`,
-        nit: item.CIF || '',
+        nit: item.NIF20 || '',
         direccionFiscal: item.DIRECCION1 || '',
-        direccionEnvio:  item.DIRECCION_ENVIO || '',
+        direccionEnvio:  item.RUTA || '',
       },
       lineas: (pedido.lineas || []).map((l: any) => ({
         codigo: l.CODARTICULO,

@@ -44,6 +44,7 @@ export interface PedidoPDFData {
     totalUSD: number;
     totalIVA?: number;
     ocultarPrecios?: boolean;
+    esPsicotropico?: boolean;
     firmante?: { usuario: string; fecha: string };
     conteo?: ConteoPDFData;
 }
@@ -111,44 +112,49 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
     }
 
     const maxDiasProteccion = Math.max(...data.lineas.map(l => l.diasProteccion ?? 0));
+    const isPsico = data.esPsicotropico === true;
     doc.setFont('helvetica', 'bold');
     doc.text('Tipo:', 16, datosFin - 1);
     doc.setFont('helvetica', 'normal');
     doc.text(
-        maxDiasProteccion > 0 ? 'Monto Factura' : 'Indexado',
+        maxDiasProteccion > 0
+            ? (isPsico ? 'Monto Factura' : `Monto Factura — NO INDEXADO (Protección proveedor: ${maxDiasProteccion} días)`)
+            : (isPsico ? 'Indexado' : 'Monto Factura — Indexado'),
         30, datosFin - 1
     );
 
     // --- Tabla de líneas ---
     const sinPrecios = data.ocultarPrecios === true;
 
-    const filas = data.lineas.map(l => {
-        if (sinPrecios) {
-            // Formato Sanidad: solo código, descripción, cantidad
-            return [
-                l.codigo,
-                (l.descripcion || '') + (l.esControlado ? ' (CONTROLADO)' : ''),
-                l.cantidad,
-            ];
-        }
-        const descPct = (!l.sinDescuento && l.descuentos?.length) ? `${l.descuentos.join('%+')}%` : '';
-        const pct     = l.porcentajeIva ?? 0;
-        const ivaTag  = pct > 0 ? `+${pct}%` : '';
-        return [
-            l.codigo,
-            (l.descripcion || '') + (l.esControlado ? ' (CONTROLADO)' : ''),
-            l.cantidad,
-            '', '', '',   // ESC PRD, ESC PRD, ESC PRV
-            descPct,      // DESC.
-            ivaTag,
-            l.precioUnitario.toFixed(2),
-            (l.precioUnitario * l.cantidad).toFixed(2),
-        ];
-    });
+    let headCols: string[];
+    const filas: any[][] = isPsico
+        ? data.lineas.map(l => {
+            if (sinPrecios) return [l.codigo, (l.descripcion || '') + (l.esControlado ? ' (CONTROLADO)' : ''), l.cantidad];
+            const descPct = (!l.sinDescuento && l.descuentos?.length) ? `${l.descuentos.join('%+')}%` : '';
+            const pct = l.porcentajeIva ?? 0;
+            return [l.codigo, (l.descripcion || '') + (l.esControlado ? ' (CONTROLADO)' : ''),
+                l.cantidad, '', '', '', descPct, pct > 0 ? `+${pct}%` : '',
+                l.precioUnitario.toFixed(2), (l.precioUnitario * l.cantidad).toFixed(2)];
+        })
+        : data.lineas.map(l => {
+            const descPct = (!sinPrecios && !l.sinDescuento && l.descuentos?.length) ? `${l.descuentos.join('%+')}%` : '';
+            const pct = l.porcentajeIva ?? 0;
+            const ivaTag = (!sinPrecios && pct > 0) ? `+${pct}%` : '';
+            const row: any[] = [l.codigo, (l.descripcion || '') + (l.esControlado ? ' (CONTROLADO)' : ''),
+                l.cantidad, (l.diasProteccion ?? 0) > 0 ? `${l.diasProteccion}d NI` : '', '', '', '', descPct];
+            if (!sinPrecios) { row.push(ivaTag); row.push(l.precioUnitario.toFixed(2)); row.push((l.precioUnitario * l.cantidad).toFixed(2)); }
+            return row;
+        });
 
-    const headCols = sinPrecios
-        ? ['Código', 'Descripción', 'Cant.']
-        : ['Código', 'Descripción', 'Cant.', 'ESC PRD', 'ESC PRD', 'ESC PRV', 'DESC.', 'IVA', 'Precio', 'Importe'];
+    if (isPsico) {
+        headCols = sinPrecios
+            ? ['Código', 'Descripción', 'Cant.']
+            : ['Código', 'Descripción', 'Cant.', 'ESC PRD', 'ESC PRD', 'ESC PRV', 'DESC.', 'IVA', 'Precio', 'Importe'];
+    } else {
+        headCols = sinPrecios
+            ? ['Código', 'Descripción', 'Cant.', 'Seg.', 'ESC PRD', 'ESC PRD', 'ESC PRV', 'DESC.']
+            : ['Código', 'Descripción', 'Cant.', 'Seg.', 'ESC PRD', 'ESC PRD', 'ESC PRV', 'DESC.', 'IVA', 'Precio', 'Importe'];
+    }
 
     autoTable(doc, {
         startY: datosFin + 5,
@@ -157,13 +163,21 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
         theme: 'plain',
         styles: { fontSize: 7, cellPadding: 1 },
         headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1 },
-        columnStyles: {
+        columnStyles: isPsico ? {
             0: { cellWidth: 18 },
             1: { cellWidth: sinPrecios ? 120 : 48 },
             ...(sinPrecios ? {} : {
                 7:  { cellWidth: 10, halign: 'center' as const },
                 8:  { halign: 'right' as const },
                 9:  { halign: 'right' as const },
+            }),
+        } : {
+            0: { cellWidth: 18 },
+            1: { cellWidth: sinPrecios ? 80 : 48 },
+            ...(sinPrecios ? {} : {
+                8:  { cellWidth: 10, halign: 'center' as const },
+                9:  { halign: 'right' as const },
+                10: { halign: 'right' as const },
             }),
         },
     });
@@ -178,27 +192,32 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
         doc.text(data.totalUSD.toFixed(2), 192, finalY + 5.5, { align: 'right' });
     }
 
-    // --- Footer farmacéutico ---
+    // --- Footer farmacéutico (solo psicotrópicos) + firmante ---
     const pageH = doc.internal.pageSize.getHeight();
-    const farmY = finalY + (sinPrecios ? 8 : (!sinPrecios && data.totalUSD ? 18 : 8));
-    doc.setFontSize(7.5);
-    doc.setFont('helvetica', 'bold');
-    doc.text('DROGUERÍA INTERCONTINENTAL, C.A.', 105, farmY, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.text('FARMACÉUTICO: Laura Navas', 105, farmY + 5, { align: 'center' });
-    doc.text('C.I: V-9.283.327', 105, farmY + 10, { align: 'center' });
-    doc.text('M.P.P.S: 6384   COLFAR: 198   INPREFAR: 141411754', 105, farmY + 15, { align: 'center' });
+    let sigLineY: number;
+    if (isPsico) {
+        const farmY = finalY + (sinPrecios ? 8 : 18);
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'bold');
+        doc.text('DROGUERÍA INTERCONTINENTAL, C.A.', 105, farmY, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.text('FARMACÉUTICO: Laura Navas', 105, farmY + 5, { align: 'center' });
+        doc.text('C.I: V-9.283.327', 105, farmY + 10, { align: 'center' });
+        doc.text('M.P.P.S: 6384   COLFAR: 198   INPREFAR: 141411754', 105, farmY + 15, { align: 'center' });
+        sigLineY = farmY + 25;
+    } else {
+        sigLineY = sinPrecios ? finalY + 10 : finalY + 38;
+    }
 
     // --- Firmante (opcional) ---
     if (data.firmante) {
-        const firmaY = farmY + 25;
         doc.setFontSize(8);
         doc.setDrawColor(180);
-        doc.line(14, firmaY, 90, firmaY);
+        doc.line(14, sigLineY, 90, sigLineY);
         doc.setFont('helvetica', 'bold');
-        doc.text(data.firmante.usuario, 14, firmaY + 5);
+        doc.text(data.firmante.usuario, 14, sigLineY + 5);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Emitido: ${data.firmante.fecha}`, 14, firmaY + 10);
+        doc.text(`Emitido: ${data.firmante.fecha}`, 14, sigLineY + 10);
     }
 
     // --- Sección de conteo (solo si viene data) ---
