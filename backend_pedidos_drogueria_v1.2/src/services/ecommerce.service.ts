@@ -88,6 +88,7 @@ export class EcommerceService {
                     archivo:       nombreArchivo,
                 };
             } else {
+                // f[2] = CODARTICULO interno (puede ser un entero); f[6] = EAN (puede no estar en el ERP)
                 items.push({
                     codArticulo:    (f[2] ?? '').trim(),
                     descripcion:    (f[3] ?? '').trim(),
@@ -291,16 +292,23 @@ export class EcommerceService {
         if (barcodes.length > 0) {
             const artReq = pool.request();
             const artPH  = barcodes.map((b, i) => { artReq.input(`b${i}`, mssql.NVarChar(50), b); return `@b${i}`; }).join(',');
+            // Busca por CODBARRAS primero; como fallback busca por CODARTICULO directo (cuando el .txt envía el código interno)
             const artRes = await artReq.query(`
-                SELECT AL.CODBARRAS, A.CODARTICULO,
+                SELECT AL.CODBARRAS AS LOOKUP_KEY, A.CODARTICULO,
                        ISNULL(A.NODTOAPLICABLE, 0) AS NODTOAPLICABLE,
                        ISNULL(A.REFPROVEEDOR,'')    AS REFPROVEEDOR
                 FROM ARTICULOSLIN AL
                 JOIN ARTICULOS    A ON A.CODARTICULO = AL.CODARTICULO
                 WHERE AL.CODBARRAS IN (${artPH})
+                UNION
+                SELECT CAST(A.CODARTICULO AS NVARCHAR(50)) AS LOOKUP_KEY, A.CODARTICULO,
+                       ISNULL(A.NODTOAPLICABLE, 0) AS NODTOAPLICABLE,
+                       ISNULL(A.REFPROVEEDOR,'')    AS REFPROVEEDOR
+                FROM ARTICULOS A
+                WHERE CAST(A.CODARTICULO AS NVARCHAR(50)) IN (${artPH})
             `);
             artRes.recordset.forEach((r: any) => {
-                barcodeToArt.set(String(r.CODBARRAS), {
+                barcodeToArt.set(String(r.LOOKUP_KEY), {
                     codarticulo: Number(r.CODARTICULO),
                     nodto:       r.NODTOAPLICABLE === true || r.NODTOAPLICABLE === 1,
                     ref:         r.REFPROVEEDOR,
@@ -426,7 +434,7 @@ export class EcommerceService {
             .query(`
                 INSERT INTO ${esquema}.APP_PEDIDO_LOG (ORDERID, EST_ANTERIOR, EST_NUEVO, USUARIO, DETALLES)
                 VALUES (@OID, NULL, 'PENDIENTE POR AUTORIZACION', 'Ecommerce',
-                        'Pedido importado desde integración ecommerce')
+                        'Pedido importado desde integración Icompras')
             `);
 
         // 11. Marcar procesado
@@ -434,6 +442,6 @@ export class EcommerceService {
             .input('ID', mssql.Int, id)
             .query(`UPDATE APP_ECOMMERCE_PEDIDOS SET PROCESADO = 1 WHERE ID = @ID`);
 
-        return { success: true, message: `Pedido ${orderId} aprobado y en PENDIENTE POR AUTORIZACION`, orderId };
+        return { success: true, message: `Pedido ${orderId} en PENDIENTE POR AUTORIZACION`, orderId };
     }
 }

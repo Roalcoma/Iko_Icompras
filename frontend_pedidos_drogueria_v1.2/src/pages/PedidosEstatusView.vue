@@ -88,6 +88,16 @@
           @update:model-value="aplicarFiltros"
         />
       </v-col>
+      <v-col cols="12" sm="6" md="2" class="d-flex align-center">
+        <v-switch
+          v-model="filtros.soloIcompras"
+          label="Solo Icompras"
+          color="teal-darken-1"
+          density="compact"
+          hide-details
+          @update:model-value="aplicarFiltros"
+        />
+      </v-col>
     </v-row>
 
     <v-row>
@@ -482,7 +492,7 @@ const estatusOpciones = [
 ];
 
 const zonas  = ref<{ zona: string; display: string }[]>([]);
-const filtros = ref({ buscarId: '', clienteId: '', codVendedor: '', estatus: null as string | null, riesgo: null as string | null, codruta: null as string | null, fechaDesde: null as string | null, fechaHasta: null as string | null, esPsicotropico: false });
+const filtros = ref({ buscarId: '', clienteId: '', codVendedor: '', estatus: null as string | null, riesgo: null as string | null, codruta: null as string | null, fechaDesde: null as string | null, fechaHasta: null as string | null, esPsicotropico: false, soloIcompras: false });
 
 let filtroTimer: ReturnType<typeof setTimeout> | null = null;
 const aplicarFiltros = () => {
@@ -494,7 +504,8 @@ const obtenerPedidos = async (page = 1, limit = 10) => {
   loading.value = true;
   try {
     const params: Record<string, any> = { page, limit };
-    if (filtros.value.buscarId)   params.buscarId    = filtros.value.buscarId;
+    if (filtros.value.soloIcompras) params.buscarId = 'EC-%';
+    else if (filtros.value.buscarId) params.buscarId = filtros.value.buscarId;
     if (filtros.value.clienteId)  params.clienteId   = filtros.value.clienteId;
     if (filtros.value.codVendedor) params.codVendedor = filtros.value.codVendedor;
     if (filtros.value.estatus)    params.estatus     = filtros.value.estatus;
