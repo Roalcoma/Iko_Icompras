@@ -27,12 +27,18 @@
           </v-chip>
         </template>
         <template v-slot:item.acciones="{ item }">
-          <div class="d-flex gap-2">
+          <div class="d-flex gap-2 flex-wrap">
             <v-btn size="small" color="purple-darken-1" variant="tonal" prepend-icon="mdi-eye" @click="abrirDetalle(item)">
               Revisar
             </v-btn>
-            <v-btn size="small" color="red-darken-2" variant="tonal" icon="mdi-file-pdf-box"
-              :loading="pdfCargando === item.ORDERID" @click="imprimirPDF(item)" />
+            <v-btn size="small" color="red-darken-2" variant="tonal" prepend-icon="mdi-file-pdf-box"
+              :loading="pdfCargando === item.ORDERID + '-con'" @click="imprimirPDF(item, false)">
+              Con precios
+            </v-btn>
+            <v-btn size="small" color="blue-grey-darken-1" variant="tonal" prepend-icon="mdi-file-pdf-box"
+              :loading="pdfCargando === item.ORDERID + '-sin'" @click="imprimirPDF(item, true)">
+              Sanidad
+            </v-btn>
           </div>
         </template>
       </v-data-table-server>
@@ -124,8 +130,9 @@ const modalDetalle = ref<any>({ mostrar: false, pedido: null });
 const codigoAprobacion = ref('');
 const aprobando = ref(false);
 
-const imprimirPDF = async (item: any) => {
-  pdfCargando.value = item.ORDERID;
+const imprimirPDF = async (item: any, sinPrecios: boolean) => {
+  const key = item.ORDERID + (sinPrecios ? '-sin' : '-con');
+  pdfCargando.value = key;
   try {
     const res = await axios.get(`${API}/pedidos`, { params: { orderId: item.ORDERID } });
     if (!res.data.success) { lanzarAviso('No se pudo cargar el pedido', 'error'); return; }
@@ -138,17 +145,23 @@ const imprimirPDF = async (item: any) => {
       cliente: {
         codcliente: item.CLIENTEID,
         nombrecliente: item.NOMBRECLIENTE || `Cliente ${item.CLIENTEID}`,
+        nit: item.CIF || '',
+        direccionFiscal: item.DIRECCION1 || '',
+        direccionEnvio:  item.DIRECCION_ENVIO || '',
       },
       lineas: (pedido.lineas || []).map((l: any) => ({
         codigo: l.CODARTICULO,
         descripcion: l.DESCRIPCION || '',
         cantidad: Number(l.PRODUCTCOUNT),
-        precioUnitario: 0,
+        precioUnitario: Number(l.PRECIOUNITARIO ?? 0),
+        descuentos: [l.DESCUENTO1, l.DESCUENTO2, l.DESCUENTO3, l.DESCUENTO4]
+          .map(Number).filter(d => d > 0),
         diasProteccion: Number(l.DIASPROTECCION ?? 0),
+        porcentajeIva: Number(l.PORCENTAJEIVA ?? 0),
         esControlado: true,
       })),
-      totalUSD: 0,
-      ocultarPrecios: true,
+      totalUSD: Number(pedido.TOTALPRECIO ?? 0),
+      ocultarPrecios: sinPrecios,
       firmante: {
         usuario: authStore.usuario?.usuario || 'Usuario desconocido',
         fecha: new Date().toLocaleString('es-VE', tz),

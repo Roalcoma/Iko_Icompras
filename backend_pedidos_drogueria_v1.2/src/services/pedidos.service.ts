@@ -272,7 +272,7 @@ export class PedidosServices {
                 SELECT
                     CP.ORDERID, CP.CLIENTEID, CP.FECHA, CP.ESTATUS, CP.CODVENDEDOR, CP.TOTALPRECIO,
                     CP.OBSERVACIONES,
-                    CL.NOMBRECLIENTE,
+                    CL.NOMBRECLIENTE, CL.CIF, CL.DIRECCION1, CL.ENVIODIRECION AS DIRECCION_ENVIO,
                     V.NOMVENDEDOR,
                     CR.ESTATUS AS RIESGO_ESTATUS,
                     (SELECT SUM(LP.PRODUCTCOUNT) FROM ${esquema}.LINEA_PED LP WHERE LP.ORDERID = CP.ORDERID) AS TOTALUNIDADES
