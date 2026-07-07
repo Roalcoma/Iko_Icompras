@@ -284,164 +284,181 @@ export class EcommerceService {
         const descuentoGlobal: number = Number(cliente.DESCUENTO_GLOBAL);
         const codVendedor: number   = Number(cliente.CODVENDEDOR);
 
-        // 5. Resolver código de barras → CODARTICULO + NODTOAPLICABLE
-        //    COD_ARTICULO en las líneas es el EAN/barcode del .txt (f[2]), no el CODARTICULO interno
+        // 5. Resolver código → CODARTICULO + atributos para separación
+        //    Busca por CODBARRAS primero; fallback a CODARTICULO directo
         const barcodes = [...new Set(lineas.map((l: any) => String(l.COD_ARTICULO).trim()).filter(Boolean))];
-        // barcodeToArt: barcode → { codarticulo, nodto, ref }
-        const barcodeToArt = new Map<string, { codarticulo: number; nodto: boolean; ref: string }>();
+        const barcodeToArt = new Map<string, {
+            codarticulo: number; nodto: boolean; ref: string;
+            seccion: number; diasProteccion: number;
+        }>();
         if (barcodes.length > 0) {
             const artReq = pool.request();
             const artPH  = barcodes.map((b, i) => { artReq.input(`b${i}`, mssql.NVarChar(50), b); return `@b${i}`; }).join(',');
-            // Busca por CODBARRAS primero; como fallback busca por CODARTICULO directo (cuando el .txt envía el código interno)
             const artRes = await artReq.query(`
                 SELECT AL.CODBARRAS AS LOOKUP_KEY, A.CODARTICULO,
-                       ISNULL(A.NODTOAPLICABLE, 0) AS NODTOAPLICABLE,
-                       ISNULL(A.REFPROVEEDOR,'')    AS REFPROVEEDOR
+                       ISNULL(A.NODTOAPLICABLE, 0)   AS NODTOAPLICABLE,
+                       ISNULL(A.REFPROVEEDOR,'')      AS REFPROVEEDOR,
+                       ISNULL(A.SECCION, 0)           AS SECCION,
+                       ISNULL(PCL.DIASPROTECCION, 0)  AS DIASPROTECCION
                 FROM ARTICULOSLIN AL
-                JOIN ARTICULOS    A ON A.CODARTICULO = AL.CODARTICULO
+                JOIN ARTICULOS A ON A.CODARTICULO = AL.CODARTICULO
+                LEFT JOIN ARTICULOSCAMPOSLIBRES ACL ON ACL.CODARTICULO = A.CODARTICULO
+                LEFT JOIN PROVEEDORESCAMPOSLIBRES PCL ON PCL.CODPROVEEDOR = ACL.CODPROVEEDORICG
                 WHERE AL.CODBARRAS IN (${artPH})
                 UNION
                 SELECT CAST(A.CODARTICULO AS NVARCHAR(50)) AS LOOKUP_KEY, A.CODARTICULO,
-                       ISNULL(A.NODTOAPLICABLE, 0) AS NODTOAPLICABLE,
-                       ISNULL(A.REFPROVEEDOR,'')    AS REFPROVEEDOR
+                       ISNULL(A.NODTOAPLICABLE, 0)   AS NODTOAPLICABLE,
+                       ISNULL(A.REFPROVEEDOR,'')      AS REFPROVEEDOR,
+                       ISNULL(A.SECCION, 0)           AS SECCION,
+                       ISNULL(PCL.DIASPROTECCION, 0)  AS DIASPROTECCION
                 FROM ARTICULOS A
+                LEFT JOIN ARTICULOSCAMPOSLIBRES ACL ON ACL.CODARTICULO = A.CODARTICULO
+                LEFT JOIN PROVEEDORESCAMPOSLIBRES PCL ON PCL.CODPROVEEDOR = ACL.CODPROVEEDORICG
                 WHERE CAST(A.CODARTICULO AS NVARCHAR(50)) IN (${artPH})
             `);
             artRes.recordset.forEach((r: any) => {
                 barcodeToArt.set(String(r.LOOKUP_KEY), {
-                    codarticulo: Number(r.CODARTICULO),
-                    nodto:       r.NODTOAPLICABLE === true || r.NODTOAPLICABLE === 1,
-                    ref:         r.REFPROVEEDOR,
+                    codarticulo:    Number(r.CODARTICULO),
+                    nodto:          r.NODTOAPLICABLE === true || r.NODTOAPLICABLE === 1,
+                    ref:            r.REFPROVEEDOR,
+                    seccion:        Number(r.SECCION),
+                    diasProteccion: Number(r.DIASPROTECCION),
                 });
             });
         }
 
-        // Verificar que todos los barcodes resolvieron
         const noResueltos = barcodes.filter(b => !barcodeToArt.has(b));
         if (noResueltos.length > 0)
             console.warn(`[Ecommerce] Barcodes no encontrados en ARTICULOS: ${noResueltos.join(', ')}`);
 
-        // 5b. Tasa de cambio para convertir BsD → USD
+        // 5b. Tasa de cambio
         let tasa = 1;
         try { tasa = await ExchangeService.getCotizacion(); } catch { /* usa 1 si falla */ }
 
-        // 6. Mejor descuento promocional por artículo (indexado por CODARTICULO interno)
+        // 6. Descuentos promocionales
         const promoDescMap = new Map<number, number>();
         try {
             const promos = await PromocionesService.getVigentes();
             for (const p of promos) {
-                const cliCod = clienteId;
                 let califica = false;
-                if      (p.alcanceCliente === 'TODOS')         califica = !(p.codigosClienteExcluir as number[]).includes(cliCod);
-                else if (p.alcanceCliente === 'INCLUIR_GRUPO') califica = (p.codigosCliente as number[]).includes(cliCod);
-                else if (p.alcanceCliente === 'EXCLUIR_GRUPO') califica = !(p.codigosCliente as number[]).includes(cliCod);
+                if      (p.alcanceCliente === 'TODOS')         califica = !(p.codigosClienteExcluir as number[]).includes(clienteId);
+                else if (p.alcanceCliente === 'INCLUIR_GRUPO') califica = (p.codigosCliente as number[]).includes(clienteId);
+                else if (p.alcanceCliente === 'EXCLUIR_GRUPO') califica = !(p.codigosCliente as number[]).includes(clienteId);
                 if (!califica) continue;
-
-                // Líneas que tienen artículos en esta promo (comparar por CODARTICULO resuelto)
                 const matchLineas = lineas.filter((l: any) => {
                     const art = barcodeToArt.get(String(l.COD_ARTICULO).trim());
                     return art && (p.codigosArticulo as number[]).includes(art.codarticulo);
                 });
-                if (matchLineas.length === 0) continue;
-
+                if (!matchLineas.length) continue;
                 const base = p.base === 'UNIDADES'
                     ? matchLineas.reduce((s: number, l: any) => s + Number(l.CANTIDAD), 0)
                     : matchLineas.reduce((s: number, l: any) => s + (Number(l.PRECIO_UNITARIO) / tasa) * Number(l.CANTIDAD), 0);
-
-                const escala = (p.escalas as any[]).find(
-                    e => base >= e.minimo && (e.maximo == null || base <= e.maximo)
-                );
+                const escala = (p.escalas as any[]).find(e => base >= e.minimo && (e.maximo == null || base <= e.maximo));
                 if (!escala) continue;
-
                 for (const l of matchLineas) {
                     const art = barcodeToArt.get(String(l.COD_ARTICULO).trim());
-                    if (!art) continue;
-                    if ((promoDescMap.get(art.codarticulo) ?? 0) < escala.porcentaje)
+                    if (art && (promoDescMap.get(art.codarticulo) ?? 0) < escala.porcentaje)
                         promoDescMap.set(art.codarticulo, escala.porcentaje);
                 }
             }
-        } catch { /* sin promociones activas — continuar */ }
+        } catch { /* sin promociones activas */ }
 
-        // 7. Armar tabla LINEA_PED
-        //    Precios del .txt vienen en BsD → dividir por tasa para obtener USD
-        const tablaLineas = new mssql.Table(`${esquema}.LINEA_PED`);
-        tablaLineas.create = false;
-        tablaLineas.columns.add('ORDERID',        mssql.VarChar(50), { nullable: false });
-        tablaLineas.columns.add('CODARTICULO',    mssql.Int,         { nullable: false });
-        tablaLineas.columns.add('REFERENCIA',     mssql.VarChar(50), { nullable: true  });
-        tablaLineas.columns.add('CODALMACEN',     mssql.VarChar(10), { nullable: false });
-        tablaLineas.columns.add('IDTARIFAV',      mssql.Int,         { nullable: false });
-        tablaLineas.columns.add('PRODUCTCOUNT',   mssql.Int,         { nullable: false });
-        tablaLineas.columns.add('PRECIOUNITARIO', mssql.Float,       { nullable: false });
-        tablaLineas.columns.add('DESCUENTO1',     mssql.Float,       { nullable: true  });
-        tablaLineas.columns.add('DESCUENTO2',     mssql.Float,       { nullable: true  });
-        tablaLineas.columns.add('DESCUENTO3',     mssql.Float,       { nullable: true  });
-        tablaLineas.columns.add('DESCUENTO4',     mssql.Float,       { nullable: true  });
-        tablaLineas.columns.add('PRECIOBRUTO',    mssql.Float,       { nullable: true  });
-
-        let totalPed = 0;
+        // 7. Separar líneas en grupos: P (psicotrópico) > SD (sin dto) > NI (no indexado) > normal
+        //    Misma lógica que CarritoView.vue
+        type GrupoLinea = { linea: any; art: typeof barcodeToArt extends Map<any, infer V> ? V : never };
+        const grupos: Record<string, GrupoLinea[]> = { normal: [], P: [], SD: [], NI: [] };
         const lineasSinArticulo: string[] = [];
 
         for (const l of lineas) {
             const barcode = String(l.COD_ARTICULO).trim();
-            const art     = barcodeToArt.get(barcode);
+            const art = barcodeToArt.get(barcode);
             if (!art) { lineasSinArticulo.push(barcode); continue; }
-
-            const precioBsdUnit  = Number(l.PRECIO_UNITARIO);
-            const precioUsdBruto = precioBsdUnit / tasa;          // BsD → USD
-            const cantidad       = Number(l.CANTIDAD);
-
-            const desc1 = art.nodto ? 0 : descuentoGlobal;
-            const desc2 = art.nodto ? 0 : (promoDescMap.get(art.codarticulo) ?? 0);
-            const precioFinal = precioUsdBruto * (1 - desc1 / 100) * (1 - desc2 / 100);
-            totalPed += precioFinal * cantidad;
-
-            tablaLineas.rows.add(
-                orderId, art.codarticulo, art.ref, 'ZAV', VED,
-                cantidad, precioFinal, desc1, desc2, 0, 0, precioUsdBruto
-            );
+            if (art.seccion === 12)                                              grupos.P.push({ linea: l, art });
+            else if (art.nodto)                                                  grupos.SD.push({ linea: l, art });
+            else if (art.diasProteccion > 0)                                     grupos.NI.push({ linea: l, art });
+            else                                                                 grupos.normal.push({ linea: l, art });
         }
 
         if (lineasSinArticulo.length > 0)
-            console.warn(`[Ecommerce] ${orderId}: barcodes sin artículo en sistema: ${lineasSinArticulo.join(', ')}`);
-        if (tablaLineas.rows.length === 0)
+            console.warn(`[Ecommerce] ${orderId}: sin artículo: ${lineasSinArticulo.join(', ')}`);
+
+        const gruposConLineas = Object.entries(grupos).filter(([, items]) => items.length > 0);
+        if (!gruposConLineas.length)
             return { success: false, message: 'Ningún artículo del pedido fue encontrado en el sistema' };
 
-        // 8. Insertar CABECERA_PED
-        await pool.request()
-            .input('ORDERID',     mssql.NVarChar(50), orderId)
-            .input('CLIENTEID',   mssql.Int,          clienteId)
-            .input('CODVENDEDOR', mssql.Int,          codVendedor)
-            .input('TOTAL',       mssql.Float,        totalPed)
-            .query(`
-                INSERT INTO ${esquema}.CABECERA_PED (ORDERID, CLIENTEID, FECHA, ESTATUS, CODVENDEDOR, TOTALPRECIO)
-                VALUES (@ORDERID, @CLIENTEID, GETDATE(), 'PENDIENTE POR AUTORIZACION',
-                    ISNULL(NULLIF((
-                        SELECT TOP 1 CAST(CCL.CODVENDEDOR AS INT) FROM CLIENTESCAMPOSLIBRES CCL
-                        WHERE CCL.CODCLIENTE = @CLIENTEID
-                          AND CCL.CODVENDEDOR IS NOT NULL
-                          AND LTRIM(RTRIM(CAST(CCL.CODVENDEDOR AS NVARCHAR))) != ''
-                    ), 0), @CODVENDEDOR),
-                    @TOTAL)
-            `);
+        // 8. Helper: armar tabla e insertar un grupo
+        const insertarGrupo = async (sufijo: string, items: GrupoLinea[]) => {
+            const orderIdGrupo = sufijo === 'normal' ? orderId : orderId + sufijo;
+            const estatus = sufijo === 'P' ? 'APROBACION PSICOTROPICOS' : 'PENDIENTE';
 
-        // 9. Insertar líneas (bulk)
-        await pool.request().bulk(tablaLineas);
+            const tabla = new mssql.Table(`${esquema}.LINEA_PED`);
+            tabla.create = false;
+            tabla.columns.add('ORDERID',        mssql.VarChar(50), { nullable: false });
+            tabla.columns.add('CODARTICULO',    mssql.Int,         { nullable: false });
+            tabla.columns.add('REFERENCIA',     mssql.VarChar(50), { nullable: true  });
+            tabla.columns.add('CODALMACEN',     mssql.VarChar(10), { nullable: false });
+            tabla.columns.add('IDTARIFAV',      mssql.Int,         { nullable: false });
+            tabla.columns.add('PRODUCTCOUNT',   mssql.Int,         { nullable: false });
+            tabla.columns.add('PRECIOUNITARIO', mssql.Float,       { nullable: false });
+            tabla.columns.add('DESCUENTO1',     mssql.Float,       { nullable: true  });
+            tabla.columns.add('DESCUENTO2',     mssql.Float,       { nullable: true  });
+            tabla.columns.add('DESCUENTO3',     mssql.Float,       { nullable: true  });
+            tabla.columns.add('DESCUENTO4',     mssql.Float,       { nullable: true  });
+            tabla.columns.add('PRECIOBRUTO',    mssql.Float,       { nullable: true  });
 
-        // 10. Log
-        await pool.request()
-            .input('OID', mssql.VarChar(50), orderId)
-            .query(`
-                INSERT INTO ${esquema}.APP_PEDIDO_LOG (ORDERID, EST_ANTERIOR, EST_NUEVO, USUARIO, DETALLES)
-                VALUES (@OID, NULL, 'PENDIENTE POR AUTORIZACION', 'Ecommerce',
-                        'Pedido importado desde integración Icompras')
-            `);
+            let total = 0;
+            for (const { linea: l, art } of items) {
+                const precioUsdBruto = Number(l.PRECIO_UNITARIO) / tasa;
+                const cantidad       = Number(l.CANTIDAD);
+                const desc1 = art.nodto ? 0 : descuentoGlobal;
+                const desc2 = art.nodto ? 0 : (promoDescMap.get(art.codarticulo) ?? 0);
+                const precioFinal = precioUsdBruto * (1 - desc1 / 100) * (1 - desc2 / 100);
+                total += precioFinal * cantidad;
+                tabla.rows.add(orderIdGrupo, art.codarticulo, art.ref, 'ZAV', VED,
+                    cantidad, precioFinal, desc1, desc2, 0, 0, precioUsdBruto);
+            }
 
-        // 11. Marcar procesado
+            await pool.request()
+                .input('ORDERID',     mssql.NVarChar(50), orderIdGrupo)
+                .input('CLIENTEID',   mssql.Int,          clienteId)
+                .input('CODVENDEDOR', mssql.Int,          codVendedor)
+                .input('TOTAL',       mssql.Float,        total)
+                .input('ESTATUS',     mssql.VarChar(50),  estatus)
+                .query(`
+                    INSERT INTO ${esquema}.CABECERA_PED (ORDERID, CLIENTEID, FECHA, ESTATUS, CODVENDEDOR, TOTALPRECIO)
+                    VALUES (@ORDERID, @CLIENTEID, GETDATE(), @ESTATUS,
+                        ISNULL(NULLIF((
+                            SELECT TOP 1 CAST(CCL.CODVENDEDOR AS INT) FROM CLIENTESCAMPOSLIBRES CCL
+                            WHERE CCL.CODCLIENTE = @CLIENTEID
+                              AND CCL.CODVENDEDOR IS NOT NULL
+                              AND LTRIM(RTRIM(CAST(CCL.CODVENDEDOR AS NVARCHAR))) != ''
+                        ), 0), @CODVENDEDOR),
+                        @TOTAL)
+                `);
+
+            await pool.request().bulk(tabla);
+
+            await pool.request()
+                .input('OID',     mssql.VarChar(50), orderIdGrupo)
+                .input('ESTATUS', mssql.VarChar(50), estatus)
+                .query(`
+                    INSERT INTO ${esquema}.APP_PEDIDO_LOG (ORDERID, EST_ANTERIOR, EST_NUEVO, USUARIO, DETALLES)
+                    VALUES (@OID, NULL, @ESTATUS, 'Ecommerce', 'Pedido importado desde integración Icompras')
+                `);
+
+            return orderIdGrupo;
+        };
+
+        // 9. Insertar cada grupo
+        const idsCreados: string[] = [];
+        for (const [sufijo, items] of gruposConLineas)
+            idsCreados.push(await insertarGrupo(sufijo, items));
+
+        // 10. Marcar procesado
         await pool.request()
             .input('ID', mssql.Int, id)
             .query(`UPDATE APP_ECOMMERCE_PEDIDOS SET PROCESADO = 1 WHERE ID = @ID`);
 
-        return { success: true, message: `Pedido ${orderId} en PENDIENTE POR AUTORIZACION`, orderId };
+        return { success: true, message: `Pedidos creados: ${idsCreados.join(', ')}`, orderId: idsCreados[0] };
     }
 }
