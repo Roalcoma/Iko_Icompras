@@ -11,6 +11,23 @@
     </div>
 
     <v-card rounded="xl" elevation="2">
+      <div class="pa-4 d-flex flex-wrap gap-3 align-center border-b">
+        <v-text-field v-model="filtros.buscarId" label="N° Orden" prepend-inner-icon="mdi-pound"
+          variant="outlined" density="compact" hide-details clearable style="min-width:160px;max-width:200px"
+          @update:model-value="resetPagina" />
+        <v-text-field v-model="filtros.clienteId" label="Cód. Cliente" prepend-inner-icon="mdi-account"
+          variant="outlined" density="compact" hide-details clearable style="min-width:140px;max-width:180px"
+          @update:model-value="resetPagina" />
+        <v-text-field v-model="filtros.fechaDesde" label="Desde" type="date"
+          variant="outlined" density="compact" hide-details clearable style="min-width:155px;max-width:175px"
+          @update:model-value="resetPagina" />
+        <v-text-field v-model="filtros.fechaHasta" label="Hasta" type="date"
+          variant="outlined" density="compact" hide-details clearable style="min-width:155px;max-width:175px"
+          @update:model-value="resetPagina" />
+        <v-btn variant="tonal" color="purple-darken-1" prepend-icon="mdi-magnify" @click="cargarPedidos">Buscar</v-btn>
+        <v-btn variant="text" color="grey" prepend-icon="mdi-close" @click="limpiarFiltros">Limpiar</v-btn>
+      </div>
+
       <v-data-table-server
         :headers="headers" :items="pedidos" :items-length="totalPedidos" :loading="cargando"
         v-model:items-per-page="itemsPerPage" @update:options="cargarPagina">
@@ -117,10 +134,19 @@ const pdfCargando = ref<string | null>(null);
 const aviso = ref({ mostrar: false, texto: '', color: 'success' });
 const lanzarAviso = (texto: string, color = 'success') => aviso.value = { mostrar: true, texto, color };
 
+const filtros = ref({ buscarId: '', clienteId: '', fechaDesde: '', fechaHasta: '' });
+const resetPagina = () => { pagina.value = 1; cargarPedidos(); };
+const limpiarFiltros = () => { filtros.value = { buscarId: '', clienteId: '', fechaDesde: '', fechaHasta: '' }; resetPagina(); };
+
 const cargarPedidos = async () => {
   cargando.value = true;
   try {
-    const res = await axios.get(`${API}/pedidos`, { params: { estatus: ESTATUS, page: pagina.value, limit: itemsPerPage.value } });
+    const params: any = { estatus: ESTATUS, page: pagina.value, limit: itemsPerPage.value };
+    if (filtros.value.buscarId)   params.buscarId    = filtros.value.buscarId;
+    if (filtros.value.clienteId)  params.clienteId   = filtros.value.clienteId;
+    if (filtros.value.fechaDesde) params.fechaDesde  = filtros.value.fechaDesde;
+    if (filtros.value.fechaHasta) params.fechaHasta  = filtros.value.fechaHasta;
+    const res = await axios.get(`${API}/pedidos`, { params });
     if (res.data.success) { pedidos.value = res.data.data; totalPedidos.value = res.data.total; }
   } finally { cargando.value = false; }
 };
