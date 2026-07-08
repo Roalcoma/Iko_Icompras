@@ -3,6 +3,7 @@ import path from 'path';
 import { mssql, connectDb } from '../db/db.conection';
 import { PromocionesService } from './promociones.service';
 import { ExchangeService }    from './exchange.service';
+import { getDbConfig }        from './dbconfig.service';
 
 const VED     = Number(process.env.VED) || 1;
 const esquema = process.env.DB_ESQUEMA  || 'dbo';
@@ -373,7 +374,7 @@ export class EcommerceService {
             const barcode = String(l.COD_ARTICULO).trim();
             const art = barcodeToArt.get(barcode);
             if (!art) { lineasSinArticulo.push(barcode); continue; }
-            if (art.seccion === 12)                                              grupos.P.push({ linea: l, art });
+            if (art.seccion === getDbConfig().dptoPsicotropicos)                  grupos.P.push({ linea: l, art });
             else if (art.nodto)                                                  grupos.SD.push({ linea: l, art });
             else if (art.diasProteccion > 0)                                     grupos.NI.push({ linea: l, art });
             else                                                                 grupos.normal.push({ linea: l, art });
