@@ -9,6 +9,7 @@ node_modules/
 # Nunca debes subir tus secretos, contraseñas o tokens a Git
 .env
 .env.local
+config/
 .env.test
 .env.production
 
