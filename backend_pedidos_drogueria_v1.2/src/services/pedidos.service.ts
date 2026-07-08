@@ -467,12 +467,23 @@ export class PedidosServices {
                         ISNULL(PCL.DIASPROTECCION, 0) AS DIASPROTECCION,
                         ISNULL(ARTICULOS.NODTOAPLICABLE, 0) AS NODTOAPLICABLE,
                         ISNULL(LP.PORCENTAJEIVA, 0) AS PORCENTAJEIVA,
-                        ISNULL(LP.MONTOIVA, 0) AS MONTOIVA
+                        ISNULL(LP.MONTOIVA, 0) AS MONTOIVA,
+                        ISNULL(LV.LOTE, '') AS LOTE,
+                        ISNULL(LV.FECHA_VEN, '') AS FECHA_VENCIMIENTO
                     FROM
                         ${esquema}.LINEA_PED LP
                         INNER JOIN ARTICULOS ON LP.CODARTICULO = ARTICULOS.CODARTICULO
                         LEFT JOIN ARTICULOSCAMPOSLIBRES ACL ON LP.CODARTICULO = ACL.CODARTICULO
                         LEFT JOIN PROVEEDORESCAMPOSLIBRES PCL ON PCL.CODPROVEEDOR = ACL.CODPROVEEDORICG
+                        OUTER APPLY (
+                            SELECT TOP 1
+                                AL.CODBARRAS AS LOTE,
+                                CONVERT(VARCHAR(10), AL.GARANTIACOMPRA, 103) AS FECHA_VEN
+                            FROM ARTICULOSLIN AL
+                            WHERE AL.CODARTICULO = LP.CODARTICULO
+                              AND AL.GARANTIACOMPRA IS NOT NULL
+                            ORDER BY AL.GARANTIACOMPRA ASC
+                        ) LV
                     WHERE
                         LP.ORDERID = @ORDERID
                 `);

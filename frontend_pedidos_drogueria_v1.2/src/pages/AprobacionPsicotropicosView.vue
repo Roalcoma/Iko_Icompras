@@ -186,6 +186,8 @@ const imprimirPDF = async (item: any, sinPrecios: boolean) => {
         diasProteccion: Number(l.DIASPROTECCION ?? 0),
         porcentajeIva: Number(l.PORCENTAJEIVA ?? 0),
         esControlado: true,
+        lote: l.LOTE || '',
+        fechaVencimiento: l.FECHA_VENCIMIENTO || '',
       })),
       totalUSD: Number(pedido.TOTALPRECIO ?? 0),
       ocultarPrecios: sinPrecios,

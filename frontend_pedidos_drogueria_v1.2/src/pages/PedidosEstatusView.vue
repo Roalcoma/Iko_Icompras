@@ -686,6 +686,8 @@ const imprimirPDF = async (item: any) => {
         sinDescuento: !!l.NODTOAPLICABLE,
         diasProteccion: Number(l.DIASPROTECCION ?? 0),
         porcentajeIva: Number(l.PORCENTAJEIVA ?? 0),
+        lote: l.LOTE || '',
+        fechaVencimiento: l.FECHA_VENCIMIENTO || '',
       })),
       totalUSD: lineas.reduce((s: number, l: any) => s + Number(l.PRECIOUNITARIO) * Number(l.PRODUCTCOUNT), 0),
       totalIVA: lineas.reduce((s: number, l: any) => s + Number(l.MONTOIVA ?? 0), 0),

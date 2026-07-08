@@ -13,6 +13,8 @@ export interface LineaPDF {
     esControlado?: boolean;
     diasProteccion?: number;
     porcentajeIva?: number;
+    lote?: string;
+    fechaVencimiento?: string;
 }
 
 export interface LineaConteoPDF {
@@ -129,7 +131,8 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
     let headCols: string[];
     const filas: any[][] = isPsico
         ? data.lineas.map(l => {
-            if (sinPrecios) return [l.codigo, (l.descripcion || '') + (l.esControlado ? ' (CONTROLADO)' : ''), l.cantidad];
+            if (sinPrecios) return [l.codigo, (l.descripcion || '') + (l.esControlado ? ' (CONTROLADO)' : ''),
+                l.cantidad, l.lote || '', l.fechaVencimiento || ''];
             const descPct = (!l.sinDescuento && l.descuentos?.length) ? `${l.descuentos.join('%+')}%` : '';
             const pct = l.porcentajeIva ?? 0;
             return [l.codigo, (l.descripcion || '') + (l.esControlado ? ' (CONTROLADO)' : ''),
@@ -148,7 +151,7 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
 
     if (isPsico) {
         headCols = sinPrecios
-            ? ['Código', 'Descripción', 'Cant.']
+            ? ['Código', 'Descripción', 'Cant.', 'Lote', 'Venc.']
             : ['Código', 'Descripción', 'Cant.', 'ESC PRD', 'ESC PRD', 'ESC PRV', 'DESC.', 'IVA', 'Precio', 'Importe'];
     } else {
         headCols = sinPrecios
@@ -165,8 +168,11 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
         headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1 },
         columnStyles: isPsico ? {
             0: { cellWidth: 18 },
-            1: { cellWidth: sinPrecios ? 120 : 48 },
-            ...(sinPrecios ? {} : {
+            1: { cellWidth: sinPrecios ? 80 : 48 },
+            ...(sinPrecios ? {
+                3: { cellWidth: 30 },
+                4: { cellWidth: 22, halign: 'center' as const },
+            } : {
                 7:  { cellWidth: 10, halign: 'center' as const },
                 8:  { halign: 'right' as const },
                 9:  { halign: 'right' as const },
