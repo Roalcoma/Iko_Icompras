@@ -73,6 +73,28 @@ export class RuteroController {
         }
     }
 
+    static async getEstadoPicking(req: Request, res: Response): Promise<void> {
+        const id = Number(req.params.id);
+        try {
+            const data = await RuteroService.getEstadoPicking(id);
+            res.json({ success: true, data });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al obtener estado de picking', error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
+    static async escanearCaja(req: Request, res: Response): Promise<void> {
+        const id      = Number(req.params.id);
+        const barcode = String(req.body.barcode ?? '').trim();
+        if (!barcode) { res.status(400).json({ success: false, message: 'barcode requerido' }); return; }
+        try {
+            const result = await RuteroService.escanearCaja(id, barcode);
+            res.json({ success: result.success, ...result });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al escanear caja', error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
     static async confirmarRutero(req: Request, res: Response): Promise<void> {
         const id = Number(req.params.id);
         try {

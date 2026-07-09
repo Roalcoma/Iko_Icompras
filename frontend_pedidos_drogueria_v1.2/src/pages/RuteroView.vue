@@ -174,12 +174,17 @@
                   </div>
                 </v-expansion-panel-title>
                 <v-expansion-panel-text>
-                  <div class="d-flex justify-space-between align-center mb-3">
+                  <div class="d-flex justify-space-between align-center mb-3 flex-wrap gap-2">
                     <v-btn
                       size="small" variant="tonal" color="primary"
                       prepend-icon="mdi-file-pdf-box"
                       @click.stop="imprimirRutero(r)"
                     >Reimprimir PDF</v-btn>
+                    <v-btn
+                      size="small" variant="tonal" color="deep-purple"
+                      prepend-icon="mdi-barcode-scan"
+                      @click.stop="abrirPicking(r)"
+                    >Picking</v-btn>
                     <v-btn
                       size="small" color="success" variant="elevated"
                       prepend-icon="mdi-check-all"
@@ -243,6 +248,85 @@
       </v-tabs-window>
     </v-card>
 
+    <!-- Dialog Picking -->
+    <v-dialog v-model="pickingDialog" max-width="700" scrollable persistent>
+      <v-card rounded="xl">
+        <v-card-title class="d-flex align-center pa-4 pb-2">
+          <v-icon start color="deep-purple">mdi-barcode-scan</v-icon>
+          Picking — Rutero {{ pickingRutero?.NUMERO }}
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="pickingDialog = false" />
+        </v-card-title>
+
+        <v-divider />
+
+        <v-card-text class="pa-4">
+          <!-- Progreso global -->
+          <div class="d-flex align-center gap-4 mb-4">
+            <div class="text-center">
+              <div class="text-h5 font-weight-black" :class="pickingCompleto ? 'text-success' : 'text-primary'">
+                {{ pickingEstado.cajasEscaneadas }} / {{ pickingEstado.totalCajas }}
+              </div>
+              <div class="text-caption text-grey-darken-1">Cajas escaneadas</div>
+            </div>
+            <v-progress-linear
+              :model-value="pickingEstado.totalCajas ? (pickingEstado.cajasEscaneadas / pickingEstado.totalCajas) * 100 : 0"
+              :color="pickingCompleto ? 'success' : 'deep-purple'"
+              height="12" rounded class="flex-grow-1"
+            />
+            <v-icon v-if="pickingCompleto" color="success" size="32">mdi-check-circle</v-icon>
+          </div>
+
+          <!-- Último resultado -->
+          <v-alert
+            v-if="pickingUltimoRes"
+            :type="pickingUltimoRes.tipo"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+            closable
+            @click:close="pickingUltimoRes = null"
+          >{{ pickingUltimoRes.mensaje }}</v-alert>
+
+          <!-- Input barcode -->
+          <v-text-field
+            ref="barcodeInputRef"
+            v-model="pickingBarcode"
+            label="Escanear código de caja"
+            prepend-inner-icon="mdi-barcode"
+            variant="outlined"
+            density="compact"
+            hide-details
+            :loading="escaneando"
+            :disabled="escaneando"
+            autofocus
+            clearable
+            class="mb-4"
+            @keyup.enter="escanearCaja"
+          />
+
+          <!-- Tabla de líneas por factura/conteo -->
+          <v-data-table
+            :headers="headersPicking"
+            :items="pickingEstado.lineas"
+            density="compact"
+            hide-default-footer
+            :items-per-page="-1"
+            :loading="cargandoPicking"
+            no-data-text="Sin datos de conteo"
+          >
+            <template #item.progreso="{ item }">
+              <v-chip
+                size="x-small"
+                :color="item.escaneadas >= item.ncajas ? 'success' : 'warning'"
+                variant="tonal"
+              >{{ item.escaneadas }}/{{ item.ncajas }}</v-chip>
+            </template>
+          </v-data-table>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" rounded="pill" timeout="4000">
       {{ snackbar.text }}
     </v-snackbar>
@@ -250,7 +334,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue';
+import { ref, computed, onMounted, reactive, nextTick } from 'vue';
 import axios from 'axios';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -279,6 +363,71 @@ const paginaRuteros     = ref(1);
 const totalRuteros      = ref(0);
 const limitRuteros      = 15;
 const limpiarFiltrosRuteros = () => { filtroRuteros.value = { numero: '', factura: '' }; paginaRuteros.value = 1; cargarRuteros(); };
+
+// Picking
+const pickingDialog    = ref(false);
+const pickingRutero    = ref<any>(null);
+const pickingBarcode   = ref('');
+const escaneando       = ref(false);
+const cargandoPicking  = ref(false);
+const barcodeInputRef  = ref<any>(null);
+const pickingEstado    = ref<{ totalCajas: number; cajasEscaneadas: number; lineas: any[] }>({ totalCajas: 0, cajasEscaneadas: 0, lineas: [] });
+const pickingUltimoRes = ref<{ tipo: 'success' | 'warning' | 'error'; mensaje: string } | null>(null);
+const pickingCompleto  = computed(() => pickingEstado.value.totalCajas > 0 && pickingEstado.value.cajasEscaneadas >= pickingEstado.value.totalCajas);
+
+const headersPicking = [
+  { title: 'Factura',  key: 'numfactura', sortable: false },
+  { title: 'Cliente',  key: 'cliente',    sortable: false },
+  { title: 'Conteo',   key: 'idconteo',   sortable: false },
+  { title: 'Progreso', key: 'progreso',   sortable: false, align: 'center' as const },
+];
+
+const abrirPicking = async (r: any) => {
+  pickingRutero.value    = r;
+  pickingBarcode.value   = '';
+  pickingUltimoRes.value = null;
+  pickingEstado.value    = { totalCajas: 0, cajasEscaneadas: 0, lineas: [] };
+  pickingDialog.value    = true;
+  await nextTick();
+  barcodeInputRef.value?.focus();
+  cargarEstadoPicking(r.ID);
+};
+
+const cargarEstadoPicking = async (idrutero: number) => {
+  cargandoPicking.value = true;
+  try {
+    const res = await axios.get(`${API}/rutero/ruteros/${idrutero}/picking`);
+    pickingEstado.value = res.data.data;
+  } catch (e: any) {
+    notify(e.response?.data?.message || 'Error al cargar estado de picking', 'error');
+  } finally {
+    cargandoPicking.value = false;
+  }
+};
+
+const escanearCaja = async () => {
+  const barcode = pickingBarcode.value.trim();
+  if (!barcode || !pickingRutero.value || escaneando.value) return;
+  escaneando.value = true;
+  pickingUltimoRes.value = null;
+  try {
+    const res = await axios.post(`${API}/rutero/ruteros/${pickingRutero.value.ID}/escanear`, { barcode });
+    if (res.data.duplicate) {
+      pickingUltimoRes.value = { tipo: 'warning', mensaje: `Caja ya escaneada: ${barcode}` };
+    } else {
+      pickingUltimoRes.value = { tipo: 'success', mensaje: res.data.message || `Caja registrada: ${barcode}` };
+      await cargarEstadoPicking(pickingRutero.value.ID);
+    }
+  } catch (e: any) {
+    const msg = e.response?.data?.message || e.message || 'Error al escanear';
+    pickingUltimoRes.value = { tipo: 'error', mensaje: msg };
+  } finally {
+    escaneando.value    = false;
+    pickingBarcode.value = '';
+    await nextTick();
+    barcodeInputRef.value?.focus();
+  }
+};
 
 const todasSeleccionadas = computed(() =>
   facturas.value.length > 0 && facturas.value.every(f => seleccionadas.value.has(clave(f)))

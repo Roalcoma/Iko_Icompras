@@ -27,6 +27,19 @@ export class RuteroService {
                     FECHARECIBIDO DATETIME     NULL
                 )
             `);
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='APP_RUTEROS_CAJAS' AND xtype='U')
+                CREATE TABLE APP_RUTEROS_CAJAS (
+                    ID         INT IDENTITY(1,1) PRIMARY KEY,
+                    IDRUTERO   INT          NOT NULL,
+                    IDCONTEO   INT          NOT NULL,
+                    POSICION   INT          NOT NULL,
+                    NUMSERIE   VARCHAR(20)  NOT NULL DEFAULT '',
+                    NUMFACTURA INT          NOT NULL DEFAULT 0,
+                    FECHAESCAN DATETIME     NOT NULL DEFAULT GETDATE(),
+                    CONSTRAINT UQ_RUTERO_CAJA UNIQUE (IDRUTERO, IDCONTEO, POSICION)
+                )
+            `);
             console.log('Tablas de rutero verificadas (BD rutero).');
         } catch (err) {
             console.error('Advertencia en RuteroService.initTablas (BD rutero):', err);
@@ -345,6 +358,140 @@ export class RuteroService {
                     WHERE IDRUTERO = @IDRUTERO AND FECHARECIBIDO IS NULL
                   )
             `);
+    }
+
+    static async getEstadoPicking(idrutero: number): Promise<{
+        totalCajas: number; cajasEscaneadas: number;
+        lineas: { numserie: string; numfactura: number; cliente: string; idconteo: number; ncajas: number; escaneadas: number }[];
+    }> {
+        const ruteroDB = await connectRuteroDB();
+        const pool     = await connectDb();
+
+        const detRes = await ruteroDB.request()
+            .input('IDRUTERO', mssql.Int, idrutero)
+            .query(`SELECT NUMSERIE, NUMFACTURA FROM APP_RUTEROS_DETALLE WHERE IDRUTERO = @IDRUTERO`);
+        const detalle = detRes.recordset;
+        if (!detalle.length) return { totalCajas: 0, cajasEscaneadas: 0, lineas: [] };
+
+        const req2 = pool.request();
+        const pairs = detalle.map((d: any, i: number) => {
+            req2.input(`S${i}`, mssql.VarChar(20), d.NUMSERIE);
+            req2.input(`N${i}`, mssql.Int,          d.NUMFACTURA);
+            return `(FV.NUMSERIE COLLATE DATABASE_DEFAULT = @S${i} AND FV.NUMFACTURA = @N${i})`;
+        }).join(' OR ');
+
+        const conteoRes = await req2.query(`
+            SELECT DISTINCT CC.IDCONTEO, CC.NCAJAS, FV.NUMSERIE, FV.NUMFACTURA,
+                   ISNULL(CL.NOMBRECLIENTE, '') AS CLIENTE
+            FROM CONTEO_CAJAS CC WITH(NOLOCK)
+            INNER JOIN PEDIDOS_CONTEOS PC  WITH(NOLOCK) ON PC.IDCONTEO = CC.IDCONTEO
+            INNER JOIN CABECERA_PED CP     WITH(NOLOCK) ON CP.ORDERID  = PC.IDPEDIDO
+            INNER JOIN PEDVENTACAB PVC     WITH(NOLOCK) ON PVC.SUPEDIDO    COLLATE Modern_Spanish_CI_AS = CP.ORDERID COLLATE Modern_Spanish_CI_AS
+            INNER JOIN ALBVENTACAB AVC     WITH(NOLOCK) ON AVC.NUMSERIE    = PVC.SERIEALBARAN
+                AND AVC.NUMALBARAN = PVC.NUMEROALBARAN AND AVC.N = PVC.NALBARAN
+            INNER JOIN FACTURASVENTA FV    WITH(NOLOCK) ON FV.NUMSERIE     = AVC.NUMSERIEFAC
+                AND FV.NUMFACTURA  = AVC.NUMFAC AND FV.N = AVC.NFAC
+            INNER JOIN CLIENTES CL         WITH(NOLOCK) ON CL.CODCLIENTE   = FV.CODCLIENTE
+            WHERE ${pairs}
+        `);
+
+        const cajasRes = await ruteroDB.request()
+            .input('IDRUTERO', mssql.Int, idrutero)
+            .query(`SELECT IDCONTEO, COUNT(*) AS CNT FROM APP_RUTEROS_CAJAS WHERE IDRUTERO = @IDRUTERO GROUP BY IDCONTEO`);
+        const escMap = new Map<number, number>(cajasRes.recordset.map((r: any) => [r.IDCONTEO, r.CNT]));
+
+        const lineas = conteoRes.recordset.map((r: any) => ({
+            numserie: r.NUMSERIE, numfactura: r.NUMFACTURA, cliente: r.CLIENTE,
+            idconteo: r.IDCONTEO, ncajas: Number(r.NCAJAS),
+            escaneadas: escMap.get(r.IDCONTEO) ?? 0,
+        }));
+
+        return {
+            totalCajas:      lineas.reduce((s, l) => s + l.ncajas, 0),
+            cajasEscaneadas: lineas.reduce((s, l) => s + l.escaneadas, 0),
+            lineas,
+        };
+    }
+
+    static async escanearCaja(idrutero: number, barcode: string): Promise<{
+        success: boolean; message: string; duplicado?: boolean;
+        factura?: string; cliente?: string; posicion?: number; ncajas?: number;
+    }> {
+        const parts = barcode.trim().split('|');
+        if (parts.length !== 2) return { success: false, message: 'Código de barras inválido' };
+        const idConteo = parseInt(parts[0]);
+        const posicion = parseInt(parts[1]);
+        if (isNaN(idConteo) || isNaN(posicion) || posicion < 1)
+            return { success: false, message: 'Código de barras inválido' };
+
+        const pool     = await connectDb();
+        const ruteroDB = await connectRuteroDB();
+
+        const conteoRes = await pool.request()
+            .input('IDCONTEO', mssql.Int, idConteo)
+            .query(`
+                SELECT DISTINCT CC.NCAJAS, FV.NUMSERIE, FV.NUMFACTURA,
+                       ISNULL(CL.NOMBRECLIENTE, '') AS CLIENTE
+                FROM CONTEO_CAJAS CC WITH(NOLOCK)
+                INNER JOIN PEDIDOS_CONTEOS PC  WITH(NOLOCK) ON PC.IDCONTEO = CC.IDCONTEO
+                INNER JOIN CABECERA_PED CP     WITH(NOLOCK) ON CP.ORDERID  = PC.IDPEDIDO
+                INNER JOIN PEDVENTACAB PVC     WITH(NOLOCK) ON PVC.SUPEDIDO    COLLATE Modern_Spanish_CI_AS = CP.ORDERID COLLATE Modern_Spanish_CI_AS
+                INNER JOIN ALBVENTACAB AVC     WITH(NOLOCK) ON AVC.NUMSERIE    = PVC.SERIEALBARAN
+                    AND AVC.NUMALBARAN = PVC.NUMEROALBARAN AND AVC.N = PVC.NALBARAN
+                INNER JOIN FACTURASVENTA FV    WITH(NOLOCK) ON FV.NUMSERIE     = AVC.NUMSERIEFAC
+                    AND FV.NUMFACTURA  = AVC.NUMFAC AND FV.N = AVC.NFAC
+                INNER JOIN CLIENTES CL         WITH(NOLOCK) ON CL.CODCLIENTE   = FV.CODCLIENTE
+                WHERE CC.IDCONTEO = @IDCONTEO
+            `);
+
+        if (!conteoRes.recordset.length)
+            return { success: false, message: `Conteo ${idConteo} no encontrado` };
+
+        const info       = conteoRes.recordset[0];
+        const ncajas     = Number(info.NCAJAS);
+        const numserie   = info.NUMSERIE;
+        const numfactura = info.NUMFACTURA;
+
+        if (posicion > ncajas)
+            return { success: false, message: `Posición ${posicion} fuera de rango (conteo tiene ${ncajas} cajas)` };
+
+        const pertRes = await ruteroDB.request()
+            .input('IDRUTERO',   mssql.Int,        idrutero)
+            .input('NUMSERIE',   mssql.VarChar(20), numserie)
+            .input('NUMFACTURA', mssql.Int,         numfactura)
+            .query(`
+                SELECT 1 FROM APP_RUTEROS_DETALLE
+                WHERE IDRUTERO   = @IDRUTERO
+                  AND NUMSERIE   COLLATE DATABASE_DEFAULT = @NUMSERIE COLLATE DATABASE_DEFAULT
+                  AND NUMFACTURA = @NUMFACTURA
+            `);
+
+        if (!pertRes.recordset.length)
+            return { success: false, message: `Factura ${numserie}-${numfactura} no pertenece a este rutero` };
+
+        try {
+            await ruteroDB.request()
+                .input('IDRUTERO',   mssql.Int,        idrutero)
+                .input('IDCONTEO',   mssql.Int,         idConteo)
+                .input('POSICION',   mssql.Int,         posicion)
+                .input('NUMSERIE',   mssql.VarChar(20), numserie)
+                .input('NUMFACTURA', mssql.Int,         numfactura)
+                .query(`
+                    INSERT INTO APP_RUTEROS_CAJAS (IDRUTERO, IDCONTEO, POSICION, NUMSERIE, NUMFACTURA)
+                    VALUES (@IDRUTERO, @IDCONTEO, @POSICION, @NUMSERIE, @NUMFACTURA)
+                `);
+            return {
+                success: true,
+                message: `Caja ${posicion}/${ncajas} verificada`,
+                factura: `${numserie}-${numfactura}`,
+                cliente: info.CLIENTE,
+                posicion, ncajas,
+            };
+        } catch (e: any) {
+            if (e.number === 2627 || e.number === 2601)
+                return { success: false, duplicado: true, message: `Caja ${posicion}/${ncajas} ya fue escaneada`, factura: `${numserie}-${numfactura}`, posicion, ncajas };
+            throw e;
+        }
     }
 
     static async confirmarRutero(idrutero: number): Promise<void> {
