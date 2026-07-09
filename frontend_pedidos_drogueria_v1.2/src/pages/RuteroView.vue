@@ -269,107 +269,134 @@
 
         <!-- TAB MI PICKING -->
         <v-tabs-window-item value="picking">
-          <div class="pa-4">
+          <div class="pa-6">
 
             <!-- Sin sesión activa -->
-            <div v-if="!cargandoSesion && !sesionPicking.length" class="text-center pa-8 text-grey-darken-1">
-              <v-icon size="48" class="mb-2">mdi-barcode-scan</v-icon>
-              <div>No tienes ruteros en tu sesión de picking.</div>
-              <div class="text-caption mt-1">Ve a "Ruteros Activos" y haz clic en "Agregar al picking".</div>
+            <div v-if="!cargandoSesion && !sesionPicking.length" class="text-center py-12 text-grey-darken-1">
+              <v-icon size="56" color="deep-purple-lighten-3" class="mb-4">mdi-barcode-scan</v-icon>
+              <div class="text-body-1 font-weight-medium mb-1">No tienes ruteros en tu sesión de picking</div>
+              <div class="text-caption">Ve a "Ruteros Activos" y haz clic en "Agregar al picking".</div>
             </div>
 
             <template v-else>
+
               <!-- Input de escaneo global -->
-              <v-card rounded="xl" elevation="2" class="mb-4 pa-4">
-                <div class="d-flex align-center gap-3 mb-3">
-                  <v-icon color="deep-purple" size="22">mdi-barcode-scan</v-icon>
-                  <span class="text-subtitle-2 font-weight-bold">Escanear caja</span>
-                  <v-spacer />
-                  <span class="text-caption text-grey-darken-1">
-                    {{ registroPicking.length }} escaneos en esta sesión
-                  </span>
+              <v-card rounded="xl" elevation="3" class="mb-6 overflow-hidden">
+                <div class="pa-5">
+                  <div class="d-flex align-center gap-3 mb-4">
+                    <v-avatar color="deep-purple" size="36" rounded="lg">
+                      <v-icon size="20" color="white">mdi-barcode-scan</v-icon>
+                    </v-avatar>
+                    <div>
+                      <div class="text-subtitle-1 font-weight-bold">Escanear caja</div>
+                      <div class="text-caption text-grey-darken-1">
+                        {{ registroPicking.length }} escaneo{{ registroPicking.length !== 1 ? 's' : '' }} en esta sesión
+                      </div>
+                    </div>
+                  </div>
+
+                  <v-text-field
+                    ref="barcodeGlobalRef"
+                    v-model="pickingBarcodeGlobal"
+                    placeholder="Escanea o escribe el código de la caja..."
+                    prepend-inner-icon="mdi-barcode"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details
+                    :loading="escaneandoGlobal"
+                    :disabled="escaneandoGlobal"
+                    autofocus
+                    clearable
+                    @keyup.enter="escanearCajaGlobal"
+                  />
                 </div>
-                <v-text-field
-                  ref="barcodeGlobalRef"
-                  v-model="pickingBarcodeGlobal"
-                  placeholder="Escanea el código de la caja..."
-                  prepend-inner-icon="mdi-barcode"
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                  :loading="escaneandoGlobal"
-                  :disabled="escaneandoGlobal"
-                  autofocus
-                  clearable
-                  @keyup.enter="escanearCajaGlobal"
-                />
 
                 <!-- Último resultado del escaneo -->
                 <v-expand-transition>
-                  <div v-if="ultimoResultadoGlobal" class="mt-3">
+                  <div v-if="ultimoResultadoGlobal">
+                    <v-divider />
                     <v-alert
                       :type="ultimoResultadoGlobal.tipo"
                       variant="tonal"
-                      density="compact"
+                      density="comfortable"
                       :title="ultimoResultadoGlobal.titulo"
+                      rounded="0"
+                      class="pa-4"
                     >
                       <template v-if="ultimoResultadoGlobal.detalle">
-                        <div class="text-caption mt-1">{{ ultimoResultadoGlobal.detalle }}</div>
+                        <div class="text-body-2 mt-1 opacity-80">{{ ultimoResultadoGlobal.detalle }}</div>
                       </template>
                     </v-alert>
                   </div>
                 </v-expand-transition>
               </v-card>
 
-              <!-- Ruteros en sesión (chips de progreso) -->
-              <div class="d-flex flex-wrap gap-3 mb-4">
-                <v-card
+              <!-- Ruteros en sesión -->
+              <div class="text-overline text-grey-darken-2 mb-3 px-1">Ruteros en esta sesión</div>
+              <v-row class="mb-6" dense>
+                <v-col
                   v-for="r in sesionPicking"
                   :key="r.ID"
-                  rounded="xl" variant="tonal" color="deep-purple"
-                  class="pa-3 d-flex align-center gap-3"
-                  style="min-width:220px"
+                  cols="12" sm="6" md="4"
                 >
-                  <div class="flex-grow-1">
-                    <div class="d-flex align-center gap-2 mb-1">
-                      <v-chip size="x-small" color="deep-purple" variant="elevated" class="font-weight-bold">{{ r.NUMERO }}</v-chip>
-                      <span class="text-caption font-weight-medium">{{ r.NOMBRE_RUTA }}</span>
+                  <v-card rounded="xl" variant="tonal" color="deep-purple" class="pa-4">
+                    <div class="d-flex align-start justify-space-between gap-2">
+                      <div class="flex-grow-1">
+                        <div class="d-flex align-center gap-2 mb-2">
+                          <v-chip size="small" color="deep-purple" variant="elevated" class="font-weight-bold">
+                            {{ r.NUMERO }}
+                          </v-chip>
+                        </div>
+                        <div class="text-body-2 font-weight-medium mb-3">{{ r.NOMBRE_RUTA }}</div>
+                        <div class="d-flex gap-4">
+                          <div class="text-center">
+                            <div class="text-h6 font-weight-black text-deep-purple-darken-2">{{ r.CAJAS_ESCANEADAS ?? 0 }}</div>
+                            <div class="text-caption text-grey-darken-1">cajas</div>
+                          </div>
+                          <v-divider vertical />
+                          <div class="text-center">
+                            <div class="text-h6 font-weight-black text-deep-purple-darken-2">{{ r.ENTREGADAS }}/{{ r.TOTAL_FACTURAS }}</div>
+                            <div class="text-caption text-grey-darken-1">facturas</div>
+                          </div>
+                        </div>
+                      </div>
+                      <v-btn
+                        icon="mdi-close-circle-outline"
+                        size="small"
+                        variant="text"
+                        color="error"
+                        :loading="liberandoPicking === r.ID"
+                        @click="liberarDeSesion(r)"
+                      />
                     </div>
-                    <div class="text-caption text-grey-darken-2">
-                      {{ r.CAJAS_ESCANEADAS }} cajas · {{ r.ENTREGADAS }}/{{ r.TOTAL_FACTURAS }} facturas
-                    </div>
-                  </div>
-                  <v-btn
-                    icon="mdi-close" size="x-small" variant="text" color="error"
-                    :loading="liberandoPicking === r.ID"
-                    @click="liberarDeSesion(r)"
-                  />
-                </v-card>
-              </div>
+                  </v-card>
+                </v-col>
+              </v-row>
 
               <!-- Log de escaneos -->
+              <div class="text-overline text-grey-darken-2 mb-3 px-1">Registro de escaneos</div>
               <v-card rounded="xl" elevation="1">
-                <v-card-title class="d-flex align-center pa-3 pb-0">
-                  <v-icon start size="18" color="deep-purple">mdi-history</v-icon>
-                  <span class="text-subtitle-2">Registro de escaneos</span>
+                <div class="d-flex align-center pa-4 pb-2">
                   <v-spacer />
-                  <v-btn size="x-small" variant="text" prepend-icon="mdi-refresh" @click="cargarRegistroPicking">
+                  <v-btn size="small" variant="text" color="deep-purple" prepend-icon="mdi-refresh" @click="cargarRegistroPicking">
                     Actualizar
                   </v-btn>
-                </v-card-title>
+                </div>
                 <v-data-table
                   :headers="headersRegistro"
                   :items="registroPicking"
-                  density="compact"
+                  density="comfortable"
                   :loading="cargandoRegistro"
                   :items-per-page="20"
                   no-data-text="Aún no hay escaneos en esta sesión"
                 >
                   <template #item.caja="{ item }">
-                    <span class="font-weight-bold">{{ item.POSICION }}/{{ item.NCAJAS }}</span>
+                    <v-chip size="small" color="deep-purple" variant="tonal" class="font-weight-bold">
+                      {{ item.POSICION }}/{{ item.NCAJAS }}
+                    </v-chip>
                   </template>
                   <template #item.factura="{ item }">
-                    {{ item.NUMSERIE }}-{{ item.NUMFACTURA }}
+                    <span class="font-weight-medium">{{ item.NUMSERIE }}-{{ item.NUMFACTURA }}</span>
                   </template>
                   <template #item.rutero="{ item }">
                     <v-chip size="x-small" color="deep-purple" variant="tonal">{{ item.RUTERO_NUMERO }}</v-chip>
@@ -379,6 +406,7 @@
                   </template>
                 </v-data-table>
               </v-card>
+
             </template>
           </div>
         </v-tabs-window-item>
