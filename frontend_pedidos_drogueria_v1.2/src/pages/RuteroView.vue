@@ -75,6 +75,11 @@
           Ruteros Activos
           <v-badge v-if="ruteros.length" :content="ruteros.length" color="primary" inline class="ml-2" />
         </v-tab>
+        <v-tab value="picking" @click="cargarSesionPicking">
+          <v-icon start>mdi-barcode-scan</v-icon>
+          Mi Picking
+          <v-badge v-if="sesionPicking.length" :content="sesionPicking.length" color="deep-purple" inline class="ml-2" />
+        </v-tab>
       </v-tabs>
 
       <v-tabs-window v-model="tab">
@@ -180,11 +185,28 @@
                       prepend-icon="mdi-file-pdf-box"
                       @click.stop="imprimirRutero(r)"
                     >Reimprimir PDF</v-btn>
-                    <v-btn
-                      size="small" variant="tonal" color="deep-purple"
-                      prepend-icon="mdi-barcode-scan"
-                      @click.stop="abrirPicking(r)"
-                    >Picking</v-btn>
+                    <!-- Botón picking: estado según PICKING_USUARIO -->
+                    <template v-if="!r.PICKING_USUARIO">
+                      <v-btn
+                        size="small" variant="tonal" color="deep-purple"
+                        prepend-icon="mdi-barcode-scan"
+                        :loading="agregandoPicking === r.ID"
+                        @click.stop="agregarAPicking(r)"
+                      >Agregar al picking</v-btn>
+                    </template>
+                    <template v-else-if="r.PICKING_USUARIO === authStore.usuario?.usuario">
+                      <v-chip
+                        size="small" color="deep-purple" variant="tonal"
+                        prepend-icon="mdi-check-circle"
+                        class="cursor-pointer"
+                        @click.stop="() => { tab = 'picking'; cargarSesionPicking(); }"
+                      >En mi sesión</v-chip>
+                    </template>
+                    <template v-else>
+                      <v-chip size="small" color="orange" variant="tonal" prepend-icon="mdi-lock">
+                        Contando: {{ r.PICKING_USUARIO }}
+                      </v-chip>
+                    </template>
                     <v-btn
                       size="small" color="success" variant="elevated"
                       prepend-icon="mdi-check-all"
@@ -242,6 +264,56 @@
                 @update:model-value="cargarRuteros"
               />
             </div>
+          </div>
+        </v-tabs-window-item>
+
+        <!-- TAB MI PICKING -->
+        <v-tabs-window-item value="picking">
+          <div class="pa-4">
+            <div v-if="cargandoSesion" class="text-center pa-8">
+              <v-progress-circular indeterminate color="deep-purple" />
+            </div>
+            <div v-else-if="!sesionPicking.length" class="text-center pa-8 text-grey-darken-1">
+              <v-icon size="48" class="mb-2">mdi-barcode-scan</v-icon>
+              <div>No tienes ruteros en tu sesión de picking.</div>
+              <div class="text-caption mt-1">Ve a "Ruteros Activos" y haz clic en "Agregar al picking".</div>
+            </div>
+            <v-row v-else>
+              <v-col v-for="r in sesionPicking" :key="r.ID" cols="12" sm="6" md="4">
+                <v-card rounded="xl" elevation="2" class="pa-4">
+                  <div class="d-flex align-center gap-2 mb-2">
+                    <v-chip color="deep-purple" size="small" variant="tonal" class="font-weight-bold">{{ r.NUMERO }}</v-chip>
+                    <span class="text-body-2 font-weight-medium">{{ r.CODRUTA }} - {{ r.NOMBRE_RUTA }}</span>
+                  </div>
+                  <div class="text-caption text-grey-darken-1 mb-3">{{ r.FECHA }}</div>
+
+                  <!-- Progreso de cajas -->
+                  <div class="d-flex align-center gap-2 mb-3">
+                    <v-icon size="16" color="deep-purple">mdi-package-variant</v-icon>
+                    <span class="text-caption">Cajas: {{ r.CAJAS_ESCANEADAS }} escaneadas</span>
+                  </div>
+
+                  <!-- Facturas entregadas -->
+                  <div class="d-flex align-center gap-2 mb-4">
+                    <v-icon size="16" color="primary">mdi-file-document</v-icon>
+                    <span class="text-caption">Facturas: {{ r.ENTREGADAS }}/{{ r.TOTAL_FACTURAS }} entregadas</span>
+                  </div>
+
+                  <div class="d-flex gap-2">
+                    <v-btn
+                      color="deep-purple" variant="tonal" size="small" flex="1"
+                      prepend-icon="mdi-barcode-scan"
+                      @click="abrirPicking(r)"
+                    >Escanear</v-btn>
+                    <v-btn
+                      color="error" variant="text" size="small" icon="mdi-close-circle-outline"
+                      :loading="liberandoPicking === r.ID"
+                      @click="liberarDeSesion(r)"
+                    />
+                  </div>
+                </v-card>
+              </v-col>
+            </v-row>
           </div>
         </v-tabs-window-item>
 
@@ -339,6 +411,9 @@ import axios from 'axios';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import logoUrl from '../assets/drogueria_logo.png';
+import { useAuthStore } from '../stores/useAuthStore';
+
+const authStore = useAuthStore();
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -364,7 +439,58 @@ const totalRuteros      = ref(0);
 const limitRuteros      = 15;
 const limpiarFiltrosRuteros = () => { filtroRuteros.value = { numero: '', factura: '' }; paginaRuteros.value = 1; cargarRuteros(); };
 
-// Picking
+// Sesión de picking
+const sesionPicking    = ref<any[]>([]);
+const cargandoSesion   = ref(false);
+const agregandoPicking = ref<number | null>(null);
+const liberandoPicking = ref<number | null>(null);
+
+const cargarSesionPicking = async () => {
+  cargandoSesion.value = true;
+  try {
+    const res = await axios.get(`${API}/rutero/ruteros/picking/sesion`);
+    sesionPicking.value = res.data.data ?? [];
+  } catch (e: any) {
+    notify(e.response?.data?.message || 'Error al cargar sesión', 'error');
+  } finally {
+    cargandoSesion.value = false;
+  }
+};
+
+const agregarAPicking = async (r: any) => {
+  agregandoPicking.value = r.ID;
+  try {
+    const res = await axios.post(`${API}/rutero/ruteros/${r.ID}/picking/iniciar`);
+    if (res.data.success) {
+      r.PICKING_USUARIO = authStore.usuario?.usuario;
+      notify(`Rutero ${r.NUMERO} agregado a tu sesión de picking`, 'success');
+    } else {
+      notify(`Bloqueado por ${res.data.bloqueadoPor}`, 'warning');
+    }
+  } catch (e: any) {
+    notify(e.response?.data?.message || 'Error', 'error');
+  } finally {
+    agregandoPicking.value = null;
+  }
+};
+
+const liberarDeSesion = async (r: any) => {
+  liberandoPicking.value = r.ID;
+  try {
+    await axios.post(`${API}/rutero/ruteros/${r.ID}/picking/liberar`);
+    sesionPicking.value = sesionPicking.value.filter(x => x.ID !== r.ID);
+    // También actualizar en la lista de ruteros activos si está cargada
+    const enLista = ruteros.value.find(x => x.ID === r.ID);
+    if (enLista) enLista.PICKING_USUARIO = null;
+    notify(`Rutero ${r.NUMERO} liberado`, 'info');
+  } catch (e: any) {
+    notify(e.response?.data?.message || 'Error', 'error');
+  } finally {
+    liberandoPicking.value = null;
+  }
+};
+
+// Picking (dialog de escaneo)
 const pickingDialog    = ref(false);
 const pickingRutero    = ref<any>(null);
 const pickingBarcode   = ref('');

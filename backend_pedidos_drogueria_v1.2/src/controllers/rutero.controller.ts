@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { RuteroService } from '../services/rutero.service';
+import { RequestConUsuario } from '../middleware/auth.middleware';
 
 export class RuteroController {
 
@@ -83,15 +84,48 @@ export class RuteroController {
         }
     }
 
-    static async escanearCaja(req: Request, res: Response): Promise<void> {
+    static async escanearCaja(req: RequestConUsuario, res: Response): Promise<void> {
         const id      = Number(req.params.id);
         const barcode = String(req.body.barcode ?? '').trim();
+        const usuario = req.usuario?.usuario ?? '';
         if (!barcode) { res.status(400).json({ success: false, message: 'barcode requerido' }); return; }
         try {
-            const result = await RuteroService.escanearCaja(id, barcode);
-            res.json({ success: result.success, ...result });
+            const result = await RuteroService.escanearCaja(id, barcode, usuario);
+            res.json(result);
         } catch (error) {
             res.status(500).json({ success: false, message: 'Error al escanear caja', error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
+    static async iniciarPicking(req: RequestConUsuario, res: Response): Promise<void> {
+        const id      = Number(req.params.id);
+        const usuario = req.usuario?.usuario ?? '';
+        try {
+            const result = await RuteroService.iniciarPicking(id, usuario);
+            res.json({ success: result.ok, bloqueadoPor: result.bloqueadoPor });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al iniciar picking', error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
+    static async liberarPicking(req: RequestConUsuario, res: Response): Promise<void> {
+        const id      = Number(req.params.id);
+        const usuario = req.usuario?.usuario ?? '';
+        try {
+            await RuteroService.liberarPicking(id, usuario);
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al liberar picking', error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
+    static async getMiSesionPicking(req: RequestConUsuario, res: Response): Promise<void> {
+        const usuario = req.usuario?.usuario ?? '';
+        try {
+            const data = await RuteroService.getMiSesionPicking(usuario);
+            res.json({ success: true, data });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al obtener sesión', error: error instanceof Error ? error.message : String(error) });
         }
     }
 

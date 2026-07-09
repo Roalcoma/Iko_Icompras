@@ -1,9 +1,33 @@
+import sql from 'mssql';
 import { connectDb, connectRuteroDB, mssql } from '../db/db.conection';
+import { getDbConfig } from './dbconfig.service';
 
 export class RuteroService {
 
     // Crea las tablas en la BD de rutero (separada de DROGUERIA)
     static async initTablas(): Promise<void> {
+        // Crea la BD si no existe, conectando al servidor sin especificar BD
+        try {
+            const cfg = getDbConfig();
+            if (cfg.dbRutero) {
+                const serverPool = await new sql.ConnectionPool({
+                    user:     cfg.user,
+                    password: cfg.password,
+                    server:   cfg.server,
+                    port:     cfg.port,
+                    options:  { encrypt: false, trustServerCertificate: true },
+                }).connect();
+                await serverPool.request().query(
+                    `IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = N'${cfg.dbRutero}')
+                     CREATE DATABASE [${cfg.dbRutero}]`
+                );
+                await serverPool.close();
+                console.log(`BD ${cfg.dbRutero} verificada/creada.`);
+            }
+        } catch (err) {
+            console.error('Advertencia al crear BD rutero:', err);
+        }
+
         try {
             const pool = await connectRuteroDB();
             await pool.request().query(`
@@ -39,6 +63,15 @@ export class RuteroService {
                     FECHAESCAN DATETIME     NOT NULL DEFAULT GETDATE(),
                     CONSTRAINT UQ_RUTERO_CAJA UNIQUE (IDRUTERO, IDCONTEO, POSICION)
                 )
+            `);
+            // Migración: columnas de sesión de picking
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('APP_RUTEROS') AND name='PICKING_USUARIO')
+                    ALTER TABLE APP_RUTEROS ADD PICKING_USUARIO VARCHAR(100) NULL
+            `);
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('APP_RUTEROS') AND name='PICKING_FECHA')
+                    ALTER TABLE APP_RUTEROS ADD PICKING_FECHA DATETIME NULL
             `);
             console.log('Tablas de rutero verificadas (BD rutero).');
         } catch (err) {
@@ -226,12 +259,13 @@ export class RuteroService {
                     AR.ID, AR.NUMERO, AR.CODRUTA, AR.NOMBRE_RUTA,
                     CONVERT(VARCHAR(16), AR.FECHA, 120) AS FECHA,
                     AR.ESTADO,
+                    AR.PICKING_USUARIO,
                     COUNT(ARD.ID)            AS TOTAL_FACTURAS,
                     COUNT(ARD.FECHARECIBIDO) AS ENTREGADAS
                 FROM APP_RUTEROS AR WITH(NOLOCK)
                 LEFT JOIN APP_RUTEROS_DETALLE ARD WITH(NOLOCK) ON ARD.IDRUTERO = AR.ID
                 ${where}
-                GROUP BY AR.ID, AR.NUMERO, AR.CODRUTA, AR.NOMBRE_RUTA, AR.FECHA, AR.ESTADO
+                GROUP BY AR.ID, AR.NUMERO, AR.CODRUTA, AR.NOMBRE_RUTA, AR.FECHA, AR.ESTADO, AR.PICKING_USUARIO
                 ORDER BY AR.FECHA DESC
                 OFFSET @OFFSET ROWS FETCH NEXT @LIMIT ROWS ONLY
             `),
@@ -243,6 +277,62 @@ export class RuteroService {
         ]);
 
         return { data: dataRes.recordset, total: cntRes.recordset[0].TOTAL };
+    }
+
+    // ── Sesión de picking ─────────────────────────────────────────────────────
+
+    static async iniciarPicking(idrutero: number, usuario: string): Promise<{ ok: boolean; bloqueadoPor?: string }> {
+        const pool = await connectRuteroDB();
+        // Claim atómico: toma si está libre, expirado (>8h) o ya es del mismo usuario
+        const upd = await pool.request()
+            .input('ID',      mssql.Int,          idrutero)
+            .input('USUARIO', mssql.VarChar(100),  usuario)
+            .query(`
+                UPDATE APP_RUTEROS
+                SET PICKING_USUARIO = @USUARIO, PICKING_FECHA = GETDATE()
+                WHERE ID = @ID
+                  AND (PICKING_USUARIO IS NULL
+                    OR PICKING_USUARIO = @USUARIO
+                    OR DATEDIFF(HOUR, PICKING_FECHA, GETDATE()) >= 8)
+            `);
+        if (upd.rowsAffected[0] > 0) return { ok: true };
+        const row = await pool.request()
+            .input('ID', mssql.Int, idrutero)
+            .query(`SELECT PICKING_USUARIO FROM APP_RUTEROS WHERE ID = @ID`);
+        return { ok: false, bloqueadoPor: row.recordset[0]?.PICKING_USUARIO ?? 'otro usuario' };
+    }
+
+    static async liberarPicking(idrutero: number, usuario: string): Promise<void> {
+        const pool = await connectRuteroDB();
+        await pool.request()
+            .input('ID',      mssql.Int,         idrutero)
+            .input('USUARIO', mssql.VarChar(100), usuario)
+            .query(`
+                UPDATE APP_RUTEROS
+                SET PICKING_USUARIO = NULL, PICKING_FECHA = NULL
+                WHERE ID = @ID AND PICKING_USUARIO = @USUARIO
+            `);
+    }
+
+    static async getMiSesionPicking(usuario: string): Promise<any[]> {
+        const pool = await connectRuteroDB();
+        const res  = await pool.request()
+            .input('USUARIO', mssql.VarChar(100), usuario)
+            .query(`
+                SELECT
+                    AR.ID, AR.NUMERO, AR.CODRUTA, AR.NOMBRE_RUTA,
+                    CONVERT(VARCHAR(16), AR.FECHA, 120) AS FECHA,
+                    AR.ESTADO,
+                    COUNT(ARD.ID)            AS TOTAL_FACTURAS,
+                    COUNT(ARD.FECHARECIBIDO) AS ENTREGADAS,
+                    (SELECT COUNT(*) FROM APP_RUTEROS_CAJAS ARC WHERE ARC.IDRUTERO = AR.ID) AS CAJAS_ESCANEADAS
+                FROM APP_RUTEROS AR WITH(NOLOCK)
+                LEFT JOIN APP_RUTEROS_DETALLE ARD WITH(NOLOCK) ON ARD.IDRUTERO = AR.ID
+                WHERE AR.PICKING_USUARIO = @USUARIO AND AR.ESTADO = 'PENDIENTE'
+                GROUP BY AR.ID, AR.NUMERO, AR.CODRUTA, AR.NOMBRE_RUTA, AR.FECHA, AR.ESTADO
+                ORDER BY AR.FECHA DESC
+            `);
+        return res.recordset;
     }
 
     static async getFacturasDeRutero(idrutero: number): Promise<any[]> {
@@ -413,10 +503,18 @@ export class RuteroService {
         };
     }
 
-    static async escanearCaja(idrutero: number, barcode: string): Promise<{
+    static async escanearCaja(idrutero: number, barcode: string, usuario: string): Promise<{
         success: boolean; message: string; duplicado?: boolean;
         factura?: string; cliente?: string; posicion?: number; ncajas?: number;
     }> {
+        // Validar que el usuario tiene el rutero en su sesión de picking
+        const ruteroDB0 = await connectRuteroDB();
+        const sesRow = await ruteroDB0.request()
+            .input('ID', mssql.Int, idrutero)
+            .query(`SELECT PICKING_USUARIO FROM APP_RUTEROS WHERE ID = @ID`);
+        const dueño = sesRow.recordset[0]?.PICKING_USUARIO;
+        if (dueño !== usuario)
+            return { success: false, message: dueño ? `Rutero en sesión de ${dueño}` : 'Agrega este rutero a tu sesión de picking primero' };
         const parts = barcode.trim().split('|');
         if (parts.length !== 2) return { success: false, message: 'Código de barras inválido' };
         const idConteo = parseInt(parts[0]);
