@@ -329,8 +329,8 @@
 
               <!-- Ruteros en sesión -->
               <p class="text-overline text-grey-darken-2 mb-2 px-1">Ruteros en esta sesión</p>
-              <v-row class="mb-6" dense>
-                <v-col v-for="r in sesionPicking" :key="r.ID" cols="12" sm="6" md="4">
+              <v-row class="mb-3" dense>
+                <v-col v-for="r in sesionPicking" :key="r.ID" cols="6" sm="4" md="3">
                   <v-card rounded="xl" variant="tonal" color="deep-purple" class="pa-3">
                     <div class="d-flex align-center gap-2 mb-2">
                       <v-chip size="x-small" color="deep-purple" variant="elevated" class="font-weight-bold">{{ r.NUMERO }}</v-chip>
@@ -347,6 +347,15 @@
                   </v-card>
                 </v-col>
               </v-row>
+              <div class="d-flex justify-end mb-6">
+                <v-btn
+                  color="success" variant="elevated"
+                  prepend-icon="mdi-truck-fast"
+                  :loading="iniciandoViaje"
+                  :disabled="!sesionPicking.length"
+                  @click="iniciarViajeSession"
+                >Iniciar Viaje</v-btn>
+              </div>
 
               <!-- Log de escaneos -->
               <p class="text-overline text-grey-darken-2 mb-2 px-1">Registro de escaneos</p>
@@ -466,6 +475,41 @@
       </v-card>
     </v-dialog>
 
+    <!-- Dialog clave admin para En Ruta -->
+    <v-dialog v-model="dialogEnRuta.show" max-width="380" persistent>
+      <v-card rounded="xl">
+        <v-card-title class="pa-4 d-flex align-center gap-2">
+          <v-icon color="warning">mdi-lock-alert</v-icon>
+          Clave de Administrador
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <p class="text-body-2 mb-3">
+            Uno o más ruteros tienen picking incompleto.
+            Ingresa la clave de administrador para iniciar el viaje de todas formas.
+          </p>
+          <v-text-field
+            v-model="dialogEnRuta.clave"
+            label="Clave de administrador"
+            type="password"
+            variant="outlined"
+            density="compact"
+            hide-details
+            autofocus
+            @keyup.enter="confirmarEnRutaConClave"
+          />
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="text" @click="dialogEnRuta.show = false">Cancelar</v-btn>
+          <v-btn color="warning" variant="elevated" :loading="dialogEnRuta.cargando" @click="confirmarEnRutaConClave">
+            <v-icon start>mdi-truck-fast</v-icon>
+            Iniciar Viaje
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" rounded="pill" timeout="4000">
       {{ snackbar.text }}
     </v-snackbar>
@@ -543,6 +587,47 @@ const agregarAPicking = async (r: any) => {
     notify(e.response?.data?.message || 'Error', 'error');
   } finally {
     agregandoPicking.value = null;
+  }
+};
+
+const iniciandoViaje = ref(false);
+const dialogEnRuta   = ref({ show: false, clave: '', cargando: false });
+
+const iniciarViajeSession = async () => {
+  iniciandoViaje.value = true;
+  try {
+    const res = await axios.post(`${API}/rutero/ruteros/picking/iniciar-viaje`);
+    if (res.data.success) {
+      sesionPicking.value = [];
+      notify(res.data.message || 'Viaje iniciado', 'success');
+    } else if (res.data.requireAdminKey) {
+      dialogEnRuta.value = { show: true, clave: '', cargando: false };
+    } else {
+      notify(res.data.message || 'Error', 'error');
+    }
+  } catch (e: any) {
+    notify(e.response?.data?.message || 'Error', 'error');
+  } finally {
+    iniciandoViaje.value = false;
+  }
+};
+
+const confirmarEnRutaConClave = async () => {
+  if (!dialogEnRuta.value.clave.trim()) return;
+  dialogEnRuta.value.cargando = true;
+  try {
+    const res = await axios.post(`${API}/rutero/ruteros/picking/iniciar-viaje`, { claveAdmin: dialogEnRuta.value.clave });
+    if (res.data.success) {
+      sesionPicking.value = [];
+      notify(res.data.message || 'Viaje iniciado', 'success');
+      dialogEnRuta.value.show = false;
+    } else {
+      notify(res.data.message || 'Clave incorrecta', 'error');
+    }
+  } catch (e: any) {
+    notify(e.response?.data?.message || 'Error', 'error');
+  } finally {
+    dialogEnRuta.value.cargando = false;
   }
 };
 

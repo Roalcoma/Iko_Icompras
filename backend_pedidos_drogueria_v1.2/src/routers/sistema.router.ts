@@ -18,7 +18,9 @@ sistemaRouter.get('/tarifa-catalogo',     authMiddleware, adminMiddleware, Siste
 sistemaRouter.post('/tarifa-catalogo',    authMiddleware, adminMiddleware, SistemaController.guardarTarifaCatalogo);
 sistemaRouter.get('/cod-almacen',         authMiddleware, adminMiddleware, SistemaController.getCodAlmacen);
 sistemaRouter.post('/cod-almacen',        authMiddleware, adminMiddleware, SistemaController.guardarCodAlmacen);
-sistemaRouter.get('/max-lineas',          authMiddleware,                  SistemaController.getMaxLineas);
-sistemaRouter.post('/max-lineas',         authMiddleware, adminMiddleware, SistemaController.guardarMaxLineas);
+sistemaRouter.get('/max-lineas',              authMiddleware,                  SistemaController.getMaxLineas);
+sistemaRouter.post('/max-lineas',             authMiddleware, adminMiddleware, SistemaController.guardarMaxLineas);
+sistemaRouter.get('/clave-picking-admin',     authMiddleware, adminMiddleware, SistemaController.getClavePickingAdmin);
+sistemaRouter.post('/clave-picking-admin',    authMiddleware, adminMiddleware, SistemaController.guardarClavePickingAdmin);
 
 export default sistemaRouter;

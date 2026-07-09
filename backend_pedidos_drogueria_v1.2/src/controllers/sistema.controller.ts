@@ -148,6 +148,21 @@ export class SistemaController {
         res.json({ success: true, message: `Máximo de líneas por pedido actualizado a ${maxLineasPorPedido}` });
     }
 
+    static async getClavePickingAdmin(_req: Request, res: Response): Promise<void> {
+        const cfg = getDbConfigPublica() as any;
+        res.json({ success: true, clavePickingAdmin: cfg.clavePickingAdmin ?? 'admin123' });
+    }
+
+    static async guardarClavePickingAdmin(req: Request, res: Response): Promise<void> {
+        const { clavePickingAdmin } = req.body;
+        if (!clavePickingAdmin || typeof clavePickingAdmin !== 'string' || clavePickingAdmin.trim().length === 0) {
+            res.status(400).json({ success: false, message: 'La clave no puede estar vacía' });
+            return;
+        }
+        guardarDbConfig({ clavePickingAdmin: clavePickingAdmin.trim() } as any);
+        res.json({ success: true, message: 'Clave de administrador de picking actualizada' });
+    }
+
     static async actualizarApp(_req: Request, res: Response): Promise<void> {
         try {
             const resultado = await ejecutarActualizacion();

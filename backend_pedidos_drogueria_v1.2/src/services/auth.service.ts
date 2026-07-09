@@ -26,7 +26,6 @@ export const MODULOS_SISTEMA = [
     { bit: 1024, codigo: 'AUDITORIA',         nombre: 'Auditoría',                   ruta: '/auditoria',               icono: 'mdi-clipboard-text-clock',  orden: 11 },
     { bit: 2048, codigo: 'AUTORIZADOR',       nombre: 'Puede autorizar pedidos',     ruta: '',                         icono: 'mdi-check-decagram',        orden: 12 },
     { bit: 4096, codigo: 'RUTERO',            nombre: 'Rutero de Entrega',           ruta: '/rutero',                  icono: 'mdi-truck-delivery',        orden: 13 },
-    { bit: 8192, codigo: 'FACTURAS_IMPRESION', nombre: 'Impresión de Facturas',      ruta: '/facturas-impresion',      icono: 'mdi-printer',               orden: 14 },
 ];
 
 export interface ModuloPermiso {

@@ -151,6 +151,17 @@ export class RuteroController {
         }
     }
 
+    static async iniciarViajeSession(req: RequestConUsuario, res: Response): Promise<void> {
+        const usuario      = req.usuario?.usuario ?? '';
+        const { claveAdmin } = req.body;
+        try {
+            const result = await RuteroService.iniciarViajeSession(usuario, claveAdmin);
+            res.json({ success: result.ok, requireAdminKey: result.requireAdminKey, message: result.message, marcados: result.marcados });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al iniciar viaje', error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
     static async confirmarRutero(req: Request, res: Response): Promise<void> {
         const id = Number(req.params.id);
         try {

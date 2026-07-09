@@ -16,6 +16,7 @@ export interface DbConfig {
     tarifaBaseCatalogo:  number;
     codAlmacen:          string;
     maxLineasPorPedido:  number;
+    clavePickingAdmin:   string;
 }
 
 const CONFIG_PATH = path.resolve(process.cwd(), 'config', 'connections.json');
@@ -47,6 +48,7 @@ export function getDbConfig(): DbConfig {
         tarifaBaseCatalogo:  Number((file as any).tarifaBaseCatalogo  ?? 2),
         codAlmacen:          String((file as any).codAlmacen ?? 'ZAV'),
         maxLineasPorPedido:  Number((file as any).maxLineasPorPedido ?? 50),
+        clavePickingAdmin:   String((file as any).clavePickingAdmin ?? 'admin123'),
     };
 }
 
@@ -74,5 +76,6 @@ export function getDbConfigPublica(): Omit<DbConfig, 'password'> & { passwordMas
         tarifaBaseCatalogo:  cfg.tarifaBaseCatalogo,
         codAlmacen:          cfg.codAlmacen,
         maxLineasPorPedido:  cfg.maxLineasPorPedido,
+        clavePickingAdmin:   cfg.clavePickingAdmin,
     };
 }

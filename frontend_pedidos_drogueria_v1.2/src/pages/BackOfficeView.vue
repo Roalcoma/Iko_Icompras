@@ -454,6 +454,35 @@
       </v-card-text>
     </v-card>
 
+    <!-- Clave admin picking -->
+    <v-card rounded="xl" elevation="2" class="mt-6">
+      <v-card-title class="pa-4 d-flex align-center">
+        <v-icon color="deep-purple" class="mr-2">mdi-truck-fast</v-icon>
+        <span class="font-weight-bold">Clave de Administrador — Picking</span>
+      </v-card-title>
+      <v-divider />
+      <v-card-text class="pa-4">
+        <p class="text-caption text-grey mb-3">
+          Clave requerida para marcar un rutero como "En Ruta" cuando el picking no está completo.
+        </p>
+        <div class="d-flex align-center gap-3">
+          <v-text-field
+            v-model="clavePickingAdmin"
+            label="Clave de admin"
+            type="password"
+            variant="outlined"
+            density="compact"
+            hide-details
+            prepend-inner-icon="mdi-lock"
+            style="max-width:280px;"
+          />
+          <v-btn color="deep-purple" variant="elevated" :loading="guardandoClaveAdmin" @click="guardarClaveAdminFn">
+            Guardar
+          </v-btn>
+        </div>
+      </v-card-text>
+    </v-card>
+
     <!-- Configuración integración Ecommerce -->
     <v-card rounded="xl" elevation="2" class="mt-6">
       <v-card-title class="pa-4 d-flex align-center">
@@ -535,7 +564,6 @@ const MODULOS = [
   { bit: 1024, codigo: 'AUDITORIA',   nombre: 'Auditoría',                icono: 'mdi-clipboard-text-clock' },
   { bit: 2048, codigo: 'AUTORIZADOR', nombre: 'Puede autorizar pedidos',  icono: 'mdi-check-decagram'       },
   { bit: 4096, codigo: 'RUTERO',              nombre: 'Rutero de Entrega',        icono: 'mdi-truck-delivery' },
-  { bit: 8192, codigo: 'FACTURAS_IMPRESION', nombre: 'Impresión de Facturas',    icono: 'mdi-printer'        },
 ];
 
 const headers = [
@@ -872,6 +900,27 @@ const guardarMaxLineasFn = async () => {
   } finally { guardandoMaxLineas.value = false; }
 };
 
+// ─── Clave admin picking ──────────────────────────────────────
+const clavePickingAdmin   = ref('');
+const guardandoClaveAdmin = ref(false);
+
+const cargarClavePickingAdmin = async () => {
+  try {
+    const res = await axios.get(`${API_SIS}/clave-picking-admin`);
+    if (res.data.success) clavePickingAdmin.value = res.data.clavePickingAdmin;
+  } catch { /* silencioso */ }
+};
+
+const guardarClaveAdminFn = async () => {
+  guardandoClaveAdmin.value = true;
+  try {
+    await axios.post(`${API_SIS}/clave-picking-admin`, { clavePickingAdmin: clavePickingAdmin.value });
+    mostrarSnack('Clave de administrador actualizada', 'success');
+  } catch (e: any) {
+    mostrarSnack(e.response?.data?.message ?? 'Error al guardar', 'error');
+  } finally { guardandoClaveAdmin.value = false; }
+};
+
 // ─── Auto-actualizador ────────────────────────────────────────
 const actualizando          = ref(false);
 const resultadoActualizacion = ref<any>(null);
@@ -901,5 +950,6 @@ onMounted(async () => {
   await cargarTarifaCatalogo();
   await cargarSeq();
   await cargarMaxLineas();
+  await cargarClavePickingAdmin();
 });
 </script>

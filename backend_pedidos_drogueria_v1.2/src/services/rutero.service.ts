@@ -724,6 +724,41 @@ export class RuteroService {
         return res.recordset;
     }
 
+    static async iniciarViajeSession(usuario: string, claveAdmin: string | undefined): Promise<{
+        ok: boolean; requireAdminKey?: boolean; message: string; marcados?: number;
+    }> {
+        const ruteroDB = await connectRuteroDB();
+
+        const sesRes = await ruteroDB.request()
+            .input('USUARIO', mssql.VarChar(100), usuario)
+            .query(`SELECT ID FROM APP_RUTEROS WHERE PICKING_USUARIO = @USUARIO AND ESTADO = 'PENDIENTE'`);
+
+        const ids: number[] = sesRes.recordset.map((r: any) => Number(r.ID));
+        if (!ids.length) return { ok: false, message: 'No tienes ruteros en tu sesión de picking' };
+
+        // Verificar completitud de cada rutero
+        const estados = await Promise.all(ids.map(id => RuteroService.getEstadoPicking(id)));
+        const hayIncompleto = estados.some(e => e.totalCajas === 0 || e.cajasEscaneadas < e.totalCajas);
+
+        if (hayIncompleto) {
+            const cfg = getDbConfig();
+            if (!claveAdmin || claveAdmin !== cfg.clavePickingAdmin) {
+                return { ok: false, requireAdminKey: true, message: 'Uno o más ruteros tienen picking incompleto. Se requiere clave de administrador.' };
+            }
+        }
+
+        // Marcar todos como EN_RUTA y liberar sesión
+        await ruteroDB.request()
+            .input('USUARIO', mssql.VarChar(100), usuario)
+            .query(`
+                UPDATE APP_RUTEROS
+                SET ESTADO = 'EN_RUTA', PICKING_USUARIO = NULL, PICKING_FECHA = NULL
+                WHERE PICKING_USUARIO = @USUARIO AND ESTADO = 'PENDIENTE'
+            `);
+
+        return { ok: true, message: `${ids.length} rutero(s) marcados como En Ruta`, marcados: ids.length };
+    }
+
     static async confirmarRutero(idrutero: number): Promise<void> {
         const ruteroDB = await connectRuteroDB();
 

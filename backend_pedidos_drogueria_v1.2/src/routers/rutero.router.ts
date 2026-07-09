@@ -11,7 +11,8 @@ ruteroRouter.get('/ruteros',                   authMiddleware, RuteroController.
 ruteroRouter.get('/ruteros/:id/facturas',      authMiddleware, RuteroController.getFacturasDeRutero);
 ruteroRouter.get('/ruteros/picking/sesion',    authMiddleware, RuteroController.getMiSesionPicking);
 ruteroRouter.get('/ruteros/picking/registro',  authMiddleware, RuteroController.getRegistroPicking);
-ruteroRouter.post('/ruteros/picking/escanear', authMiddleware, RuteroController.escanearCajaGlobal);
+ruteroRouter.post('/ruteros/picking/escanear',       authMiddleware, RuteroController.escanearCajaGlobal);
+ruteroRouter.post('/ruteros/picking/iniciar-viaje',  authMiddleware, RuteroController.iniciarViajeSession);
 ruteroRouter.get('/ruteros/:id/picking',       authMiddleware, RuteroController.getEstadoPicking);
 ruteroRouter.post('/ruteros/:id/picking/iniciar', authMiddleware, RuteroController.iniciarPicking);
 ruteroRouter.post('/ruteros/:id/picking/liberar', authMiddleware, RuteroController.liberarPicking);
