@@ -137,16 +137,29 @@
               label="N° Rutero"
               prepend-inner-icon="mdi-clipboard-list"
               variant="outlined" density="compact" hide-details clearable
-              style="min-width:160px;max-width:200px"
+              style="min-width:140px;max-width:180px"
+              @keyup.enter="buscarRuteros"
+              @click:clear="buscarRuteros"
             />
             <v-text-field
               v-model="filtroRuteros.factura"
               label="N° Factura"
               prepend-inner-icon="mdi-file-document"
               variant="outlined" density="compact" hide-details clearable
-              style="min-width:160px;max-width:200px"
+              style="min-width:140px;max-width:180px"
+              @keyup.enter="buscarRuteros"
+              @click:clear="buscarRuteros"
             />
-            <v-btn color="primary" variant="tonal" prepend-icon="mdi-magnify" @click="() => { paginaRuteros.value = 1; cargarRuteros(); }">Buscar</v-btn>
+            <v-text-field
+              v-model="filtroRuteros.pedido"
+              label="N° Pedido"
+              prepend-inner-icon="mdi-package-variant"
+              variant="outlined" density="compact" hide-details clearable
+              style="min-width:140px;max-width:180px"
+              @keyup.enter="buscarRuteros"
+              @click:clear="buscarRuteros"
+            />
+            <v-btn color="primary" variant="tonal" prepend-icon="mdi-magnify" @click="buscarRuteros">Buscar</v-btn>
             <v-btn variant="text" color="grey" prepend-icon="mdi-close" @click="limpiarFiltrosRuteros">Limpiar</v-btn>
           </div>
           <div class="pa-4">
@@ -161,11 +174,12 @@
               <v-expansion-panel
                 v-for="r in ruteros"
                 :key="r.ID"
-                @group:selected="(ev) => { if (ev.value) cargarFacturasRutero(r.ID); }"
+                @group:selected="(ev) => { if (ev.value) { cargarFacturasRutero(r.ID); filtroPickingEstado.value = 'todos'; } }"
               >
                 <v-expansion-panel-title>
                   <div class="d-flex align-center gap-3 w-100 flex-wrap">
                     <v-chip color="primary" size="small" variant="tonal" class="font-weight-bold">{{ r.NUMERO }}</v-chip>
+                    <v-chip v-if="r.ESTADO === 'EN_RUTA'" color="blue-darken-3" size="x-small" variant="elevated" prepend-icon="mdi-truck-fast">En Viaje</v-chip>
                     <span class="font-weight-medium">{{ r.CODRUTA }} - {{ r.NOMBRE_RUTA }}</span>
                     <v-spacer />
                     <v-chip
@@ -185,27 +199,29 @@
                       prepend-icon="mdi-file-pdf-box"
                       @click.stop="imprimirRutero(r)"
                     >Reimprimir PDF</v-btn>
-                    <!-- Botón picking: estado según PICKING_USUARIO -->
-                    <template v-if="!r.PICKING_USUARIO">
-                      <v-btn
-                        size="small" variant="tonal" color="deep-purple"
-                        prepend-icon="mdi-barcode-scan"
-                        :loading="agregandoPicking === r.ID"
-                        @click.stop="agregarAPicking(r)"
-                      >Agregar al picking</v-btn>
-                    </template>
-                    <template v-else-if="r.PICKING_USUARIO === authStore.usuario?.usuario">
-                      <v-chip
-                        size="small" color="deep-purple" variant="tonal"
-                        prepend-icon="mdi-check-circle"
-                        class="cursor-pointer"
-                        @click.stop="() => { tab = 'picking'; cargarSesionPicking(); }"
-                      >En mi sesión</v-chip>
-                    </template>
-                    <template v-else>
-                      <v-chip size="small" color="orange" variant="tonal" prepend-icon="mdi-lock">
-                        Contando: {{ r.PICKING_USUARIO }}
-                      </v-chip>
+                    <!-- Botón picking: solo para ruteros PENDIENTE -->
+                    <template v-if="r.ESTADO === 'PENDIENTE'">
+                      <template v-if="!r.PICKING_USUARIO">
+                        <v-btn
+                          size="small" variant="tonal" color="deep-purple"
+                          prepend-icon="mdi-barcode-scan"
+                          :loading="agregandoPicking === r.ID"
+                          @click.stop="agregarAPicking(r)"
+                        >Agregar al picking</v-btn>
+                      </template>
+                      <template v-else-if="r.PICKING_USUARIO === authStore.usuario?.usuario">
+                        <v-chip
+                          size="small" color="deep-purple" variant="tonal"
+                          prepend-icon="mdi-check-circle"
+                          class="cursor-pointer"
+                          @click.stop="() => { tab = 'picking'; cargarSesionPicking(); }"
+                        >En mi sesión</v-chip>
+                      </template>
+                      <template v-else>
+                        <v-chip size="small" color="orange" variant="tonal" prepend-icon="mdi-lock">
+                          Contando: {{ r.PICKING_USUARIO }}
+                        </v-chip>
+                      </template>
                     </template>
                     <v-btn
                       size="small" color="success" variant="elevated"
@@ -221,18 +237,38 @@
                   <div v-if="!facturasRutero[r.ID]" class="text-center pa-4">
                     <v-progress-circular indeterminate size="24" color="primary" />
                   </div>
+                  <div v-if="facturasRutero[r.ID]">
+                    <!-- Filtro picking -->
+                    <div class="d-flex align-center gap-2 px-2 pt-2 pb-1 flex-wrap">
+                      <v-btn-toggle v-model="filtroPickingEstado" mandatory density="compact" rounded="xl" variant="outlined" style="height:28px">
+                        <v-btn value="todos"        size="x-small">Todos</v-btn>
+                        <v-btn value="checkeado"    size="x-small" color="deep-purple">Pick. listo</v-btn>
+                        <v-btn value="pendiente"    size="x-small" color="orange">Pick. pend.</v-btn>
+                        <v-btn value="entregado"    size="x-small" color="success">Entregado</v-btn>
+                        <v-btn value="no_entregado" size="x-small" color="grey">No entregado</v-btn>
+                      </v-btn-toggle>
+                      <span class="text-caption text-grey-darken-1 ml-2">{{ filtrarFacturasRutero(r.ID).length }} facturas</span>
+                    </div>
                   <v-data-table
-                    v-else
                     :headers="headersRutero"
-                    :items="facturasRutero[r.ID]"
+                    :items="filtrarFacturasRutero(r.ID)"
                     density="compact"
                     hide-default-footer
                     :items-per-page="-1"
                   >
                     <template #item.estado="{ item }">
-                      <v-icon :color="item.FECHARECIBIDO ? 'success' : 'grey-lighten-1'">
-                        {{ item.FECHARECIBIDO ? 'mdi-check-circle' : 'mdi-circle-outline' }}
-                      </v-icon>
+                      <div class="d-flex gap-1 align-center">
+                        <v-icon :color="item.CHECKEADO ? 'deep-purple' : (item.TOTAL_CAJAS ? 'orange' : 'grey-lighten-2')" size="18" :title="item.CHECKEADO ? 'Picking listo' : 'Picking pendiente'">
+                          {{ item.CHECKEADO ? 'mdi-package-check' : 'mdi-package-variant-closed' }}
+                        </v-icon>
+                        <v-icon :color="item.FECHARECIBIDO ? 'success' : 'grey-lighten-2'" size="18" :title="item.FECHARECIBIDO ? 'Entregado' : 'Pendiente'">
+                          {{ item.FECHARECIBIDO ? 'mdi-check-circle' : 'mdi-circle-outline' }}
+                        </v-icon>
+                      </div>
+                    </template>
+                    <template #item.PEDIDO="{ item }">
+                      <span v-if="item.PEDIDO" class="text-caption font-weight-medium text-blue-darken-2">{{ item.PEDIDO }}</span>
+                      <span v-else class="text-caption text-grey-lighten-1">—</span>
                     </template>
                     <template #item.BULTOS="{ item }">
                       <v-chip size="x-small" color="blue-darken-1" variant="tonal">{{ item.BULTOS ?? 0 }}</v-chip>
@@ -246,11 +282,12 @@
                         size="x-small" color="success" variant="tonal"
                         icon="mdi-check"
                         :loading="confirmandoFactura === clave(item)"
-                        @click.stop="confirmarFactura(r.ID, item)"
+                        @click.stop="abrirDialogFecha(r, item)"
                       />
-                      <v-icon v-else color="success" size="small">mdi-check-circle</v-icon>
+                      <span v-else class="text-caption text-grey-darken-1">{{ item.FECHARECIBIDO?.toString().substring(0,10) }}</span>
                     </template>
                   </v-data-table>
+                  </div>
                 </v-expansion-panel-text>
               </v-expansion-panel>
             </v-expansion-panels>
@@ -342,7 +379,7 @@
                       />
                     </div>
                     <div class="text-caption text-grey-darken-2">
-                      {{ r.CAJAS_ESCANEADAS ?? 0 }} cajas · {{ r.ENTREGADAS }}/{{ r.TOTAL_FACTURAS }} facturas
+                      {{ r.CAJAS_ESCANEADAS ?? 0 }}/{{ r.TOTAL_CAJAS ?? '?' }} cajas · {{ r.TOTAL_FACTURAS }} fact.
                     </div>
                   </v-card>
                 </v-col>
@@ -510,6 +547,35 @@
       </v-card>
     </v-dialog>
 
+    <!-- Dialog fecha entrega -->
+    <v-dialog v-model="dialogFecha.show" max-width="360" persistent>
+      <v-card rounded="xl">
+        <v-card-title class="pa-4">Confirmar entrega</v-card-title>
+        <v-card-text class="pa-4 pt-0">
+          <p class="text-body-2 mb-3 text-grey-darken-2">
+            {{ dialogFecha.item?.FACTURA_VISUAL }} · {{ dialogFecha.item?.CLIENTE }}
+          </p>
+          <v-text-field
+            v-model="dialogFecha.fecha"
+            label="Fecha de entrega"
+            type="date"
+            :min="dialogFecha.minFecha"
+            :max="hoyISO"
+            variant="outlined"
+            density="compact"
+          />
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="text" @click="dialogFecha.show = false">Cancelar</v-btn>
+          <v-btn color="success" variant="elevated" :loading="!!confirmandoFactura" @click="confirmarFacturaConFecha">
+            <v-icon start>mdi-check</v-icon>
+            Confirmar
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" rounded="pill" timeout="4000">
       {{ snackbar.text }}
     </v-snackbar>
@@ -538,23 +604,72 @@ const creando          = ref(false);
 const seleccionadas    = ref<Set<string>>(new Set());
 const snackbar         = ref({ show: false, text: '', color: '' });
 
+// TTS — Web Speech API nativa
+const hablar = (texto: string) => {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u  = new SpeechSynthesisUtterance(texto);
+  u.lang   = 'es-VE';
+  u.rate   = 0.92;
+  window.speechSynthesis.speak(u);
+};
+
 // Ruteros activos
 const ruteros           = ref<any[]>([]);
 const cargandoRuteros   = ref(false);
 const facturasRutero    = reactive<Record<number, any[]>>({});
 const confirmandoRutero = ref<number | null>(null);
 const confirmandoFactura = ref<string | null>(null);
-const filtroRuteros     = ref({ numero: '', factura: '' });
+const filtroRuteros     = ref({ numero: '', factura: '', pedido: '' });
 const paginaRuteros     = ref(1);
 const totalRuteros      = ref(0);
 const limitRuteros      = 15;
-const limpiarFiltrosRuteros = () => { filtroRuteros.value = { numero: '', factura: '' }; paginaRuteros.value = 1; cargarRuteros(); };
+const filtroPickingEstado = ref<string>('todos');
+const buscarRuteros = () => { paginaRuteros.value = 1; cargarRuteros(); };
+const limpiarFiltrosRuteros = () => { filtroRuteros.value = { numero: '', factura: '', pedido: '' }; paginaRuteros.value = 1; cargarRuteros(); };
+const hoyISO = new Date().toISOString().substring(0, 10);
+
+const filtrarFacturasRutero = (id: number) => {
+  const lista = facturasRutero[id] ?? [];
+  switch (filtroPickingEstado.value) {
+    case 'checkeado':    return lista.filter((f: any) => f.CHECKEADO);
+    case 'pendiente':    return lista.filter((f: any) => !f.CHECKEADO);
+    case 'entregado':    return lista.filter((f: any) => f.FECHARECIBIDO);
+    case 'no_entregado': return lista.filter((f: any) => !f.FECHARECIBIDO);
+    default:             return lista;
+  }
+};
+
+const dialogFecha = ref({ show: false, idrutero: 0, item: null as any, fecha: hoyISO, minFecha: '' });
+
+const abrirDialogFecha = (r: any, item: any) => {
+  dialogFecha.value = {
+    show: true,
+    idrutero: r.ID,
+    item,
+    fecha: hoyISO,
+    minFecha: (r.FECHA ?? '').substring(0, 10),
+  };
+};
 
 // Sesión de picking
-const sesionPicking    = ref<any[]>([]);
-const cargandoSesion   = ref(false);
-const agregandoPicking = ref<number | null>(null);
-const liberandoPicking = ref<number | null>(null);
+const sesionPicking             = ref<any[]>([]);
+const cargandoSesion            = ref(false);
+const agregandoPicking          = ref<number | null>(null);
+const liberandoPicking          = ref<number | null>(null);
+const pickingCompletoAnunciado  = ref(false);
+
+const verificarPickingCompleto = () => {
+  if (pickingCompletoAnunciado.value) return;
+  if (!sesionPicking.value.length) return;
+  const completo = sesionPicking.value.every(
+    r => Number(r.TOTAL_CAJAS) > 0 && Number(r.CAJAS_ESCANEADAS) >= Number(r.TOTAL_CAJAS)
+  );
+  if (completo) {
+    pickingCompletoAnunciado.value = true;
+    hablar('Picking completado, quedó bello');
+  }
+};
 
 const cargarSesionPicking = async () => {
   cargandoSesion.value = true;
@@ -564,6 +679,7 @@ const cargarSesionPicking = async () => {
       cargarRegistroPicking(),
     ]);
     sesionPicking.value = sesRes.data.data ?? [];
+    pickingCompletoAnunciado.value = false;
   } catch (e: any) {
     notify(e.response?.data?.message || 'Error al cargar sesión', 'error');
   } finally {
@@ -583,6 +699,7 @@ const agregarAPicking = async (r: any) => {
     } else {
       notify(`Bloqueado por ${res.data.bloqueadoPor}`, 'warning');
     }
+    pickingCompletoAnunciado.value = false;
   } catch (e: any) {
     notify(e.response?.data?.message || 'Error', 'error');
   } finally {
@@ -594,6 +711,7 @@ const iniciandoViaje = ref(false);
 const dialogEnRuta   = ref({ show: false, clave: '', cargando: false });
 
 const iniciarViajeSession = async () => {
+  hablar('Iniciando Viaje');
   iniciandoViaje.value = true;
   try {
     const res = await axios.post(`${API}/rutero/ruteros/picking/iniciar-viaje`);
@@ -619,6 +737,7 @@ const confirmarEnRutaConClave = async () => {
     const res = await axios.post(`${API}/rutero/ruteros/picking/iniciar-viaje`, { claveAdmin: dialogEnRuta.value.clave });
     if (res.data.success) {
       sesionPicking.value = [];
+      hablar('Iniciando Viaje');
       notify(res.data.message || 'Viaje iniciado', 'success');
       dialogEnRuta.value.show = false;
     } else {
@@ -681,21 +800,21 @@ const escanearCajaGlobal = async () => {
   try {
     const res = await axios.post(`${API}/rutero/ruteros/picking/escanear`, { barcode });
     if (res.data.success) {
+      hablar('Bulto Cargado');
       ultimoResultadoGlobal.value = {
         tipo:   'success',
         titulo: `Caja ${res.data.posicion}/${res.data.ncajas} — ${res.data.factura}`,
         detalle: `${res.data.cliente}  ·  Rutero ${res.data.ruteroNumero}  ·  ${res.data.ruteroRuta}`,
       };
-      // Prepend al log local para feedback inmediato
       registroPicking.value.unshift({
         POSICION: res.data.posicion, NCAJAS: res.data.ncajas,
         NUMSERIE: res.data.factura?.split('-')[0], NUMFACTURA: res.data.factura?.split('-')[1],
         CLIENTE: res.data.cliente, RUTERO_NUMERO: res.data.ruteroNumero,
         FECHAESCAN: new Date().toLocaleString('es-VE'),
       });
-      // Actualizar cajas_escaneadas del rutero en la sesión
       const r = sesionPicking.value.find(x => x.ID === res.data.ruteroId);
       if (r) r.CAJAS_ESCANEADAS = (r.CAJAS_ESCANEADAS ?? 0) + 1;
+      verificarPickingCompleto();
     } else if (res.data.duplicado) {
       ultimoResultadoGlobal.value = {
         tipo:   'warning',
@@ -703,9 +822,11 @@ const escanearCajaGlobal = async () => {
         detalle: `${res.data.cliente}  ·  Rutero ${res.data.ruteroNumero}`,
       };
     } else {
+      hablar('Bulto no Encontrado');
       ultimoResultadoGlobal.value = { tipo: 'error', titulo: res.data.message };
     }
   } catch (e: any) {
+    hablar('Bulto no Encontrado');
     ultimoResultadoGlobal.value = { tipo: 'error', titulo: e.response?.data?.message || 'Error al escanear' };
   } finally {
     escaneandoGlobal.value       = false;
@@ -796,6 +917,7 @@ const headersOficina = [
 const headersRutero = [
   { title: '',        key: 'estado',        sortable: false, width: '48px' },
   { title: 'Factura', key: 'FACTURA_VISUAL', sortable: false },
+  { title: 'Pedido',  key: 'PEDIDO',        sortable: false },
   { title: 'Cliente', key: 'CLIENTE' },
   { title: 'Bultos',  key: 'BULTOS',  align: 'center' as const },
   { title: 'Total',   key: 'TOTAL',   align: 'end'    as const },
@@ -881,6 +1003,7 @@ const cargarRuteros = async () => {
     if (codruta)                        params.codruta       = codruta;
     if (filtroRuteros.value.numero)     params.buscarNumero  = filtroRuteros.value.numero;
     if (filtroRuteros.value.factura)    params.buscarFactura = filtroRuteros.value.factura;
+    if (filtroRuteros.value.pedido)     params.buscarPedido  = filtroRuteros.value.pedido;
     const res = await axios.get(`${API}/rutero/ruteros`, { params });
     ruteros.value    = res.data.data  ?? [];
     totalRuteros.value = res.data.total ?? 0;
@@ -901,17 +1024,17 @@ const cargarFacturasRutero = async (idrutero: number) => {
   }
 };
 
-const confirmarFactura = async (idrutero: number, item: any) => {
+const confirmarFactura = async (idrutero: number, item: any, fechaEntrega?: string) => {
   const k = clave(item);
   confirmandoFactura.value = k;
   try {
     await axios.put(`${API}/rutero/confirmar-factura`, {
       idrutero,
-      numserie:   item.NUMSERIE,
-      numfactura: item.NUMFACTURA,
+      numserie:    item.NUMSERIE,
+      numfactura:  item.NUMFACTURA,
+      fechaEntrega: fechaEntrega ?? undefined,
     });
-    // Update local state
-    item.FECHARECIBIDO = new Date().toISOString();
+    item.FECHARECIBIDO = fechaEntrega ?? new Date().toISOString();
     const r = ruteros.value.find(x => x.ID === idrutero);
     if (r) r.ENTREGADAS = (r.ENTREGADAS || 0) + 1;
   } catch (e: any) {
@@ -919,6 +1042,12 @@ const confirmarFactura = async (idrutero: number, item: any) => {
   } finally {
     confirmandoFactura.value = null;
   }
+};
+
+const confirmarFacturaConFecha = async () => {
+  const { idrutero, item, fecha } = dialogFecha.value;
+  dialogFecha.value.show = false;
+  await confirmarFactura(idrutero, item, fecha);
 };
 
 const confirmarRuteroCompleto = async (id: number) => {

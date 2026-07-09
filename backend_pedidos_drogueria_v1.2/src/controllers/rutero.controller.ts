@@ -41,10 +41,11 @@ export class RuteroController {
         const codruta       = req.query.codruta       ? Number(req.query.codruta)             : undefined;
         const buscarNumero  = req.query.buscarNumero  ? String(req.query.buscarNumero).trim()  : undefined;
         const buscarFactura = req.query.buscarFactura ? String(req.query.buscarFactura).trim() : undefined;
+        const buscarPedido  = req.query.buscarPedido  ? String(req.query.buscarPedido).trim()  : undefined;
         const page          = req.query.page          ? Number(req.query.page)                 : 1;
         const limit         = req.query.limit         ? Number(req.query.limit)                : 15;
         try {
-            const { data, total } = await RuteroService.getRuteros(codruta, buscarNumero, buscarFactura, page, limit);
+            const { data, total } = await RuteroService.getRuteros(codruta, buscarNumero, buscarFactura, buscarPedido, page, limit);
             res.json({ success: true, data, total });
         } catch (error) {
             res.status(500).json({ success: false, message: 'Error al obtener ruteros', error: error instanceof Error ? error.message : String(error) });
@@ -62,12 +63,12 @@ export class RuteroController {
     }
 
     static async confirmarFacturaRutero(req: Request, res: Response): Promise<void> {
-        const { idrutero, numserie, numfactura } = req.body;
+        const { idrutero, numserie, numfactura, fechaEntrega } = req.body;
         if (!idrutero || !numserie || !numfactura) {
             res.status(400).json({ success: false, message: 'idrutero, numserie y numfactura requeridos' }); return;
         }
         try {
-            await RuteroService.confirmarFacturaRutero(Number(idrutero), String(numserie), Number(numfactura));
+            await RuteroService.confirmarFacturaRutero(Number(idrutero), String(numserie), Number(numfactura), fechaEntrega ? String(fechaEntrega) : undefined);
             res.json({ success: true, message: 'Factura confirmada' });
         } catch (error) {
             res.status(500).json({ success: false, message: 'Error al confirmar factura', error: error instanceof Error ? error.message : String(error) });
@@ -152,8 +153,8 @@ export class RuteroController {
     }
 
     static async iniciarViajeSession(req: RequestConUsuario, res: Response): Promise<void> {
-        const usuario      = req.usuario?.usuario ?? '';
-        const { claveAdmin } = req.body;
+        const usuario    = req.usuario?.usuario ?? '';
+        const claveAdmin = req.body?.claveAdmin;
         try {
             const result = await RuteroService.iniciarViajeSession(usuario, claveAdmin);
             res.json({ success: result.ok, requireAdminKey: result.requireAdminKey, message: result.message, marcados: result.marcados });

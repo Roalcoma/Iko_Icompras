@@ -55,12 +55,12 @@ export class RuteroService {
                 IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='APP_RUTEROS_CAJAS' AND xtype='U')
                 CREATE TABLE APP_RUTEROS_CAJAS (
                     ID         INT IDENTITY(1,1) PRIMARY KEY,
-                    IDRUTERO   INT          NOT NULL,
-                    IDCONTEO   INT          NOT NULL,
-                    POSICION   INT          NOT NULL,
-                    NUMSERIE   VARCHAR(20)  NOT NULL DEFAULT '',
-                    NUMFACTURA INT          NOT NULL DEFAULT 0,
-                    FECHAESCAN DATETIME     NOT NULL DEFAULT GETDATE(),
+                    IDRUTERO   INT           NOT NULL,
+                    IDCONTEO   NVARCHAR(100) NOT NULL,
+                    POSICION   INT           NOT NULL,
+                    NUMSERIE   VARCHAR(20)   NOT NULL DEFAULT '',
+                    NUMFACTURA INT           NOT NULL DEFAULT 0,
+                    FECHAESCAN DATETIME      NOT NULL DEFAULT GETDATE(),
                     CONSTRAINT UQ_RUTERO_CAJA UNIQUE (IDRUTERO, IDCONTEO, POSICION)
                 )
             `);
@@ -72,6 +72,25 @@ export class RuteroService {
             await pool.request().query(`
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('APP_RUTEROS') AND name='PICKING_FECHA')
                     ALTER TABLE APP_RUTEROS ADD PICKING_FECHA DATETIME NULL
+            `);
+            // Migración: agregar POSICION si no existe (versiones previas no la tenían)
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('APP_RUTEROS_CAJAS') AND name='POSICION')
+                    ALTER TABLE APP_RUTEROS_CAJAS ADD POSICION INT NOT NULL DEFAULT 0
+            `);
+            // Migración: IDCONTEO de INT → NVARCHAR(100) para soportar GUIDs del sistema de conteo
+            await pool.request().query(`
+                IF EXISTS (
+                    SELECT 1 FROM sys.columns
+                    WHERE object_id=OBJECT_ID('APP_RUTEROS_CAJAS') AND name='IDCONTEO' AND system_type_id=56
+                )
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name='UQ_RUTERO_CAJA')
+                        ALTER TABLE APP_RUTEROS_CAJAS DROP CONSTRAINT UQ_RUTERO_CAJA
+                    TRUNCATE TABLE APP_RUTEROS_CAJAS
+                    ALTER TABLE APP_RUTEROS_CAJAS ALTER COLUMN IDCONTEO NVARCHAR(100) NOT NULL
+                    ALTER TABLE APP_RUTEROS_CAJAS ADD CONSTRAINT UQ_RUTERO_CAJA UNIQUE (IDRUTERO, IDCONTEO, POSICION)
+                END
             `);
             // Migración: cliente y ncajas en APP_RUTEROS_CAJAS para log auto-suficiente
             await pool.request().query(`
@@ -232,13 +251,14 @@ export class RuteroService {
     }
 
     static async getRuteros(
-        codruta?: number, buscarNumero?: string, buscarFactura?: string,
+        codruta?: number, buscarNumero?: string, buscarFactura?: string, buscarPedido?: string,
         page = 1, limit = 15
     ): Promise<{ data: any[]; total: number }> {
         const pool   = await connectRuteroDB();
         const req    = pool.request();
         const reqCnt = pool.request();
-        let where  = `WHERE AR.ESTADO = 'PENDIENTE'`;
+        const dbMain = getDbConfig().dbName;
+        let where  = `WHERE AR.ESTADO IN ('PENDIENTE', 'EN_RUTA')`;
         if (codruta) {
             req.input('CODRUTA', mssql.Int, codruta);
             reqCnt.input('CODRUTA', mssql.Int, codruta);
@@ -257,6 +277,22 @@ export class RuteroService {
                 WHERE ARD2.IDRUTERO = AR.ID
                   AND (CAST(ARD2.NUMFACTURA AS NVARCHAR(20)) LIKE @BUSCAR_FAC
                     OR ARD2.NUMSERIE LIKE @BUSCAR_FAC)
+            )`;
+        }
+        if (buscarPedido) {
+            req.input('BUSCAR_PED', mssql.NVarChar(100), `%${buscarPedido}%`);
+            reqCnt.input('BUSCAR_PED', mssql.NVarChar(100), `%${buscarPedido}%`);
+            where += ` AND EXISTS (
+                SELECT 1 FROM APP_RUTEROS_DETALLE ARD2
+                WHERE ARD2.IDRUTERO = AR.ID AND EXISTS (
+                    SELECT 1 FROM [${dbMain}]..[ALBVENTACAB] AV2 WITH(NOLOCK)
+                    INNER JOIN [${dbMain}]..[PEDVENTACAB] PV2 WITH(NOLOCK)
+                        ON PV2.SERIEALBARAN COLLATE DATABASE_DEFAULT = AV2.NUMSERIE COLLATE DATABASE_DEFAULT
+                       AND PV2.NUMEROALBARAN = AV2.NUMALBARAN
+                    WHERE AV2.NUMSERIEFAC COLLATE DATABASE_DEFAULT = ARD2.NUMSERIE COLLATE DATABASE_DEFAULT
+                      AND AV2.NUMFAC = ARD2.NUMFACTURA
+                      AND PV2.SUPEDIDO LIKE @BUSCAR_PED
+                )
             )`;
         }
         req.input('OFFSET', mssql.Int, (page - 1) * limit);
@@ -324,8 +360,9 @@ export class RuteroService {
     }
 
     static async getMiSesionPicking(usuario: string): Promise<any[]> {
-        const pool = await connectRuteroDB();
-        const res  = await pool.request()
+        const pool   = await connectRuteroDB();
+        const dbMain = getDbConfig().dbName;
+        const res    = await pool.request()
             .input('USUARIO', mssql.VarChar(100), usuario)
             .query(`
                 SELECT
@@ -334,7 +371,21 @@ export class RuteroService {
                     AR.ESTADO,
                     COUNT(ARD.ID)            AS TOTAL_FACTURAS,
                     COUNT(ARD.FECHARECIBIDO) AS ENTREGADAS,
-                    (SELECT COUNT(*) FROM APP_RUTEROS_CAJAS ARC WHERE ARC.IDRUTERO = AR.ID) AS CAJAS_ESCANEADAS
+                    (SELECT COUNT(*) FROM APP_RUTEROS_CAJAS ARC WHERE ARC.IDRUTERO = AR.ID) AS CAJAS_ESCANEADAS,
+                    (SELECT ISNULL(SUM(CC.NCAJAS), 0)
+                     FROM [${dbMain}]..CONTEO_CAJAS CC WITH(NOLOCK)
+                     INNER JOIN [${dbMain}]..PEDIDOS_CONTEOS PC  WITH(NOLOCK) ON PC.IDCONTEO = CC.IDCONTEO
+                     INNER JOIN [${dbMain}]..CABECERA_PED   CP  WITH(NOLOCK) ON CP.ORDERID  = PC.IDPEDIDO
+                     INNER JOIN [${dbMain}]..PEDVENTACAB    PVC WITH(NOLOCK) ON PVC.SUPEDIDO COLLATE Modern_Spanish_CI_AS = CP.ORDERID COLLATE Modern_Spanish_CI_AS
+                     INNER JOIN [${dbMain}]..ALBVENTACAB    AVC WITH(NOLOCK) ON AVC.NUMSERIE = PVC.SERIEALBARAN AND AVC.NUMALBARAN = PVC.NUMEROALBARAN AND AVC.N = PVC.NALBARAN
+                     INNER JOIN [${dbMain}]..FACTURASVENTA  FV  WITH(NOLOCK) ON FV.NUMSERIE = AVC.NUMSERIEFAC AND FV.NUMFACTURA = AVC.NUMFAC AND FV.N = AVC.NFAC
+                     WHERE EXISTS (
+                         SELECT 1 FROM APP_RUTEROS_DETALLE ARD2
+                         WHERE ARD2.IDRUTERO = AR.ID
+                           AND ARD2.NUMSERIE   COLLATE DATABASE_DEFAULT = FV.NUMSERIE   COLLATE DATABASE_DEFAULT
+                           AND ARD2.NUMFACTURA = FV.NUMFACTURA
+                     )
+                    ) AS TOTAL_CAJAS
                 FROM APP_RUTEROS AR WITH(NOLOCK)
                 LEFT JOIN APP_RUTEROS_DETALLE ARD WITH(NOLOCK) ON ARD.IDRUTERO = AR.ID
                 WHERE AR.PICKING_USUARIO = @USUARIO AND AR.ESTADO = 'PENDIENTE'
@@ -396,7 +447,17 @@ export class RuteroService {
                        AND PV2.NUMEROALBARAN = AV2.NUMALBARAN
                     WHERE AV2.NUMSERIEFAC COLLATE DATABASE_DEFAULT = FV.NUMSERIE COLLATE DATABASE_DEFAULT
                       AND AV2.NUMFAC = FV.NUMFACTURA
-                ) AS PEDIDO
+                ) AS PEDIDO,
+                ISNULL((
+                    SELECT SUM(CC.NCAJAS)
+                    FROM CONTEO_CAJAS CC WITH(NOLOCK)
+                    INNER JOIN PEDIDOS_CONTEOS PC2 WITH(NOLOCK) ON PC2.IDCONTEO = CC.IDCONTEO
+                    INNER JOIN CABECERA_PED CP2 WITH(NOLOCK) ON CP2.ORDERID = PC2.IDPEDIDO
+                    INNER JOIN PEDVENTACAB PV3 WITH(NOLOCK) ON PV3.SUPEDIDO COLLATE Modern_Spanish_CI_AS = CP2.ORDERID COLLATE Modern_Spanish_CI_AS
+                    INNER JOIN ALBVENTACAB AV3 WITH(NOLOCK) ON AV3.NUMSERIE = PV3.SERIEALBARAN AND AV3.NUMALBARAN = PV3.NUMEROALBARAN AND AV3.N = PV3.NALBARAN
+                    WHERE AV3.NUMSERIEFAC COLLATE DATABASE_DEFAULT = FV.NUMSERIE COLLATE DATABASE_DEFAULT
+                      AND AV3.NUMFAC = FV.NUMFACTURA
+                ), 0) AS TOTAL_CAJAS
             FROM FACTURASVENTA FV WITH(NOLOCK)
             LEFT JOIN CLIENTES CL WITH(NOLOCK)
                 ON CL.CODCLIENTE = FV.CODCLIENTE
@@ -408,18 +469,33 @@ export class RuteroService {
             ORDER BY CL.NOMBRECLIENTE, FV.NUMSERIE, FV.NUMFACTURA
         `);
 
+        // CAJAS_ESCANEADAS por factura (BD rutero)
+        const cajasRes = await ruteroDB.request()
+            .input('IDRUTERO', mssql.Int, idrutero)
+            .query(`SELECT NUMSERIE, NUMFACTURA, COUNT(*) AS CNT FROM APP_RUTEROS_CAJAS WHERE IDRUTERO = @IDRUTERO GROUP BY NUMSERIE, NUMFACTURA`);
+        const cajasMap = new Map<string, number>(
+            cajasRes.recordset.map((r: any) => [`${String(r.NUMSERIE).trim()}|${r.NUMFACTURA}`, Number(r.CNT)])
+        );
+
         // Combina FECHARECIBIDO (BD rutero) con el resto (DROGUERIA)
         const fechaMap = new Map(
             detalle.map(d => [`${d.NUMSERIE}|${d.NUMFACTURA}`, d.FECHARECIBIDO])
         );
-        return factRes.recordset.map((f: any) => ({
-            ...f,
-            FECHARECIBIDO: fechaMap.get(`${f.NUMSERIE}|${f.NUMFACTURA}`) ?? null,
-        }));
+        return factRes.recordset.map((f: any) => {
+            const cajasEsc = cajasMap.get(`${String(f.NUMSERIE).trim()}|${f.NUMFACTURA}`) ?? 0;
+            const totalCaj = Number(f.TOTAL_CAJAS) || 0;
+            return {
+                ...f,
+                FECHARECIBIDO:    fechaMap.get(`${f.NUMSERIE}|${f.NUMFACTURA}`) ?? null,
+                CAJAS_ESCANEADAS: cajasEsc,
+                CHECKEADO:        totalCaj > 0 && cajasEsc >= totalCaj,
+            };
+        });
     }
 
-    static async confirmarFacturaRutero(idrutero: number, numserie: string, numfactura: number): Promise<void> {
+    static async confirmarFacturaRutero(idrutero: number, numserie: string, numfactura: number, fechaEntrega?: string): Promise<void> {
         const ruteroDB = await connectRuteroDB();
+        const fechaVal = fechaEntrega ? `'${fechaEntrega.substring(0, 10)}'` : 'GETDATE()';
 
         await ruteroDB.request()
             .input('IDRUTERO',   mssql.Int,         idrutero)
@@ -427,7 +503,7 @@ export class RuteroService {
             .input('NUMFACTURA', mssql.Int,          numfactura)
             .query(`
                 UPDATE APP_RUTEROS_DETALLE
-                SET FECHARECIBIDO = GETDATE()
+                SET FECHARECIBIDO = ${fechaVal}
                 WHERE IDRUTERO = @IDRUTERO
                   AND NUMSERIE   COLLATE DATABASE_DEFAULT = @NUMSERIE   COLLATE DATABASE_DEFAULT
                   AND NUMFACTURA = @NUMFACTURA
@@ -440,7 +516,7 @@ export class RuteroService {
             .input('NUMFACTURA', mssql.Int,         numfactura)
             .query(`
                 UPDATE FACTURASVENTACAMPOSLIBRES
-                SET FECHARECIBIDO = GETDATE()
+                SET FECHARECIBIDO = ${fechaVal}
                 WHERE NUMSERIE   COLLATE DATABASE_DEFAULT = @NUMSERIE COLLATE DATABASE_DEFAULT
                   AND NUMFACTURA = @NUMFACTURA
                   AND FECHARECIBIDO IS NULL
@@ -497,7 +573,7 @@ export class RuteroService {
         const cajasRes = await ruteroDB.request()
             .input('IDRUTERO', mssql.Int, idrutero)
             .query(`SELECT IDCONTEO, COUNT(*) AS CNT FROM APP_RUTEROS_CAJAS WHERE IDRUTERO = @IDRUTERO GROUP BY IDCONTEO`);
-        const escMap = new Map<number, number>(cajasRes.recordset.map((r: any) => [r.IDCONTEO, r.CNT]));
+        const escMap = new Map<string, number>(cajasRes.recordset.map((r: any) => [String(r.IDCONTEO), r.CNT]));
 
         const lineas = conteoRes.recordset.map((r: any) => ({
             numserie: r.NUMSERIE, numfactura: r.NUMFACTURA, cliente: r.CLIENTE,
@@ -526,16 +602,16 @@ export class RuteroService {
             return { success: false, message: dueño ? `Rutero en sesión de ${dueño}` : 'Agrega este rutero a tu sesión de picking primero' };
         const parts = barcode.trim().split('|');
         if (parts.length !== 2) return { success: false, message: 'Código de barras inválido' };
-        const idConteo = parseInt(parts[0]);
+        const idConteo = parts[0].trim();
         const posicion = parseInt(parts[1]);
-        if (isNaN(idConteo) || isNaN(posicion) || posicion < 1)
+        if (!idConteo || isNaN(posicion) || posicion < 1)
             return { success: false, message: 'Código de barras inválido' };
 
         const pool     = await connectDb();
         const ruteroDB = await connectRuteroDB();
 
         const conteoRes = await pool.request()
-            .input('IDCONTEO', mssql.Int, idConteo)
+            .input('IDCONTEO', mssql.NVarChar(100), idConteo)
             .query(`
                 SELECT DISTINCT CC.NCAJAS, FV.NUMSERIE, FV.NUMFACTURA,
                        ISNULL(CL.NOMBRECLIENTE, '') AS CLIENTE
@@ -578,11 +654,11 @@ export class RuteroService {
 
         try {
             await ruteroDB.request()
-                .input('IDRUTERO',   mssql.Int,        idrutero)
-                .input('IDCONTEO',   mssql.Int,         idConteo)
-                .input('POSICION',   mssql.Int,         posicion)
-                .input('NUMSERIE',   mssql.VarChar(20), numserie)
-                .input('NUMFACTURA', mssql.Int,         numfactura)
+                .input('IDRUTERO',   mssql.Int,           idrutero)
+                .input('IDCONTEO',   mssql.NVarChar(100),  idConteo)
+                .input('POSICION',   mssql.Int,            posicion)
+                .input('NUMSERIE',   mssql.VarChar(20),    numserie)
+                .input('NUMFACTURA', mssql.Int,            numfactura)
                 .query(`
                     INSERT INTO APP_RUTEROS_CAJAS (IDRUTERO, IDCONTEO, POSICION, NUMSERIE, NUMFACTURA)
                     VALUES (@IDRUTERO, @IDCONTEO, @POSICION, @NUMSERIE, @NUMFACTURA)
@@ -610,9 +686,9 @@ export class RuteroService {
     }> {
         const parts = barcode.trim().split('|');
         if (parts.length !== 2) return { success: false, message: 'Código de barras inválido' };
-        const idConteo = parseInt(parts[0]);
+        const idConteo = parts[0].trim();
         const posicion = parseInt(parts[1]);
-        if (isNaN(idConteo) || isNaN(posicion) || posicion < 1)
+        if (!idConteo || isNaN(posicion) || posicion < 1)
             return { success: false, message: 'Código de barras inválido' };
 
         const pool     = await connectDb();
@@ -620,7 +696,7 @@ export class RuteroService {
 
         // 1. Resolver factura y cliente desde DROGUERIA
         const conteoRes = await pool.request()
-            .input('IDCONTEO', mssql.Int, idConteo)
+            .input('IDCONTEO', mssql.NVarChar(100), idConteo)
             .query(`
                 SELECT DISTINCT CC.NCAJAS, FV.NUMSERIE, FV.NUMFACTURA,
                        ISNULL(CL.NOMBRECLIENTE, '') AS CLIENTE
@@ -673,7 +749,7 @@ export class RuteroService {
         try {
             await ruteroDB.request()
                 .input('IDRUTERO',   mssql.Int,           idrutero)
-                .input('IDCONTEO',   mssql.Int,            idConteo)
+                .input('IDCONTEO',   mssql.NVarChar(100),  idConteo)
                 .input('POSICION',   mssql.Int,            posicion)
                 .input('NUMSERIE',   mssql.VarChar(20),    numserie)
                 .input('NUMFACTURA', mssql.Int,            numfactura)
