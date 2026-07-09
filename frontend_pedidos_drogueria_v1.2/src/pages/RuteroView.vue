@@ -141,7 +141,7 @@
               variant="outlined" density="compact" hide-details clearable
               style="min-width:160px;max-width:200px"
             />
-            <v-btn color="primary" variant="tonal" prepend-icon="mdi-magnify" @click="cargarRuteros">Buscar</v-btn>
+            <v-btn color="primary" variant="tonal" prepend-icon="mdi-magnify" @click="() => { paginaRuteros.value = 1; cargarRuteros(); }">Buscar</v-btn>
             <v-btn variant="text" color="grey" prepend-icon="mdi-close" @click="limpiarFiltrosRuteros">Limpiar</v-btn>
           </div>
           <div class="pa-4">
@@ -227,6 +227,16 @@
                 </v-expansion-panel-text>
               </v-expansion-panel>
             </v-expansion-panels>
+
+            <div v-if="totalRuteros > limitRuteros" class="d-flex justify-center pt-4">
+              <v-pagination
+                v-model="paginaRuteros"
+                :length="Math.ceil(totalRuteros / limitRuteros)"
+                :total-visible="7"
+                density="compact"
+                @update:model-value="cargarRuteros"
+              />
+            </div>
           </div>
         </v-tabs-window-item>
 
@@ -265,7 +275,10 @@ const facturasRutero    = reactive<Record<number, any[]>>({});
 const confirmandoRutero = ref<number | null>(null);
 const confirmandoFactura = ref<string | null>(null);
 const filtroRuteros     = ref({ numero: '', factura: '' });
-const limpiarFiltrosRuteros = () => { filtroRuteros.value = { numero: '', factura: '' }; cargarRuteros(); };
+const paginaRuteros     = ref(1);
+const totalRuteros      = ref(0);
+const limitRuteros      = 15;
+const limpiarFiltrosRuteros = () => { filtroRuteros.value = { numero: '', factura: '' }; paginaRuteros.value = 1; cargarRuteros(); };
 
 const todasSeleccionadas = computed(() =>
   facturas.value.length > 0 && facturas.value.every(f => seleccionadas.value.has(clave(f)))
@@ -364,12 +377,13 @@ const cargarRuteros = async () => {
   cargandoRuteros.value = true;
   try {
     const codruta = zonaSeleccionada.value?.zona ? parseInt(zonaSeleccionada.value.zona) : undefined;
-    const params: any = {};
+    const params: any = { page: paginaRuteros.value, limit: limitRuteros };
     if (codruta)                        params.codruta       = codruta;
     if (filtroRuteros.value.numero)     params.buscarNumero  = filtroRuteros.value.numero;
     if (filtroRuteros.value.factura)    params.buscarFactura = filtroRuteros.value.factura;
     const res = await axios.get(`${API}/rutero/ruteros`, { params });
-    ruteros.value = res.data.data ?? [];
+    ruteros.value    = res.data.data  ?? [];
+    totalRuteros.value = res.data.total ?? 0;
   } catch (e: any) {
     notify(e.response?.data?.error || e.message || 'Error al cargar ruteros', 'error');
   } finally {

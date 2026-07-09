@@ -176,20 +176,27 @@ export class RuteroService {
         return { id, numero };
     }
 
-    static async getRuteros(codruta?: number, buscarNumero?: string, buscarFactura?: string): Promise<any[]> {
-        const pool = await connectRuteroDB();
-        const req  = pool.request();
+    static async getRuteros(
+        codruta?: number, buscarNumero?: string, buscarFactura?: string,
+        page = 1, limit = 15
+    ): Promise<{ data: any[]; total: number }> {
+        const pool   = await connectRuteroDB();
+        const req    = pool.request();
+        const reqCnt = pool.request();
         let where  = `WHERE AR.ESTADO = 'PENDIENTE'`;
         if (codruta) {
             req.input('CODRUTA', mssql.Int, codruta);
+            reqCnt.input('CODRUTA', mssql.Int, codruta);
             where += ' AND AR.CODRUTA = @CODRUTA';
         }
         if (buscarNumero) {
             req.input('BUSCAR_NUM', mssql.NVarChar(100), `%${buscarNumero}%`);
+            reqCnt.input('BUSCAR_NUM', mssql.NVarChar(100), `%${buscarNumero}%`);
             where += ' AND AR.NUMERO LIKE @BUSCAR_NUM';
         }
         if (buscarFactura) {
             req.input('BUSCAR_FAC', mssql.NVarChar(100), `%${buscarFactura}%`);
+            reqCnt.input('BUSCAR_FAC', mssql.NVarChar(100), `%${buscarFactura}%`);
             where += ` AND EXISTS (
                 SELECT 1 FROM APP_RUTEROS_DETALLE ARD2
                 WHERE ARD2.IDRUTERO = AR.ID
@@ -197,23 +204,32 @@ export class RuteroService {
                     OR ARD2.NUMSERIE LIKE @BUSCAR_FAC)
             )`;
         }
-        const result = await req.query(`
-            SELECT
-                AR.ID,
-                AR.NUMERO,
-                AR.CODRUTA,
-                AR.NOMBRE_RUTA,
-                CONVERT(VARCHAR(16), AR.FECHA, 120) AS FECHA,
-                AR.ESTADO,
-                COUNT(ARD.ID)             AS TOTAL_FACTURAS,
-                COUNT(ARD.FECHARECIBIDO)  AS ENTREGADAS
-            FROM APP_RUTEROS AR WITH(NOLOCK)
-            LEFT JOIN APP_RUTEROS_DETALLE ARD WITH(NOLOCK) ON ARD.IDRUTERO = AR.ID
-            ${where}
-            GROUP BY AR.ID, AR.NUMERO, AR.CODRUTA, AR.NOMBRE_RUTA, AR.FECHA, AR.ESTADO
-            ORDER BY AR.FECHA DESC
-        `);
-        return result.recordset;
+        req.input('OFFSET', mssql.Int, (page - 1) * limit);
+        req.input('LIMIT',  mssql.Int, limit);
+
+        const [dataRes, cntRes] = await Promise.all([
+            req.query(`
+                SELECT
+                    AR.ID, AR.NUMERO, AR.CODRUTA, AR.NOMBRE_RUTA,
+                    CONVERT(VARCHAR(16), AR.FECHA, 120) AS FECHA,
+                    AR.ESTADO,
+                    COUNT(ARD.ID)            AS TOTAL_FACTURAS,
+                    COUNT(ARD.FECHARECIBIDO) AS ENTREGADAS
+                FROM APP_RUTEROS AR WITH(NOLOCK)
+                LEFT JOIN APP_RUTEROS_DETALLE ARD WITH(NOLOCK) ON ARD.IDRUTERO = AR.ID
+                ${where}
+                GROUP BY AR.ID, AR.NUMERO, AR.CODRUTA, AR.NOMBRE_RUTA, AR.FECHA, AR.ESTADO
+                ORDER BY AR.FECHA DESC
+                OFFSET @OFFSET ROWS FETCH NEXT @LIMIT ROWS ONLY
+            `),
+            reqCnt.query(`
+                SELECT COUNT(DISTINCT AR.ID) AS TOTAL
+                FROM APP_RUTEROS AR WITH(NOLOCK)
+                ${where}
+            `),
+        ]);
+
+        return { data: dataRes.recordset, total: cntRes.recordset[0].TOTAL };
     }
 
     static async getFacturasDeRutero(idrutero: number): Promise<any[]> {
