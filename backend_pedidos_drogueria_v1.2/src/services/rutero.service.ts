@@ -602,7 +602,7 @@ export class RuteroService {
         const dueño = sesRow.recordset[0]?.PICKING_USUARIO;
         if (dueño !== usuario)
             return { success: false, message: dueño ? `Rutero en sesión de ${dueño}` : 'Agrega este rutero a tu sesión de picking primero' };
-        const parts = barcode.trim().split('|');
+        const parts = barcode.trim().replace(/'/g, '-').replace(/ç/g, '|').split('|');
         if (parts.length !== 2) return { success: false, message: 'Código de barras inválido' };
         const idPedido = parts[0].trim();
         const posicion = parseInt(parts[1]);
@@ -688,7 +688,7 @@ export class RuteroService {
         ruteroId?: number; ruteroNumero?: string; ruteroRuta?: string;
         factura?: string; cliente?: string; posicion?: number; ncajas?: number;
     }> {
-        const parts = barcode.trim().split('|');
+        const parts = barcode.trim().replace(/'/g, '-').replace(/ç/g, '|').split('|');
         if (parts.length !== 2) return { success: false, message: 'Código de barras inválido' };
         const idPedido = parts[0].trim();
         const posicion = parseInt(parts[1]);
