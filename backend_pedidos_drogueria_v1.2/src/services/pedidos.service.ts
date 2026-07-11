@@ -216,14 +216,14 @@ export class PedidosServices {
                     getDbConfig().codAlmacen,
                     idtarifav,
                     cantidad,
-                    precio,
+                    +Number(precio).toFixed(2),
                     DESCUENTO1 || 0,
                     DESCUENTO2 || 0,
                     DESCUENTO3 || 0,
                     DESCUENTO4 || 0,
-                    PRECIOBRUTO || precio,
+                    +Number(PRECIOBRUTO || precio).toFixed(2),
                     PORCENTAJEIVA || 0,
-                    MONTOIVA || 0
+                    +Number(MONTOIVA || 0).toFixed(2)
                 );
             }
 
@@ -581,12 +581,12 @@ export class PedidosServices {
                     codalmacen,
                     idtarifav,
                     cantidad,
-                    precio,
+                    +Number(precio).toFixed(2),
                     DESCUENTO1 || 0,
                     DESCUENTO2 || 0,
                     DESCUENTO3 || 0,
                     DESCUENTO4 || 0,
-                    PRECIOBRUTO || precio
+                    +Number(PRECIOBRUTO || precio).toFixed(2)
                 );
             }
 

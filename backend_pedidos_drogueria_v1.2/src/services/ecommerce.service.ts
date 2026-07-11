@@ -421,11 +421,11 @@ export class EcommerceService {
 
             let total = 0;
             for (const { linea: l, art } of consolidated.values()) {
-                const precioUsdBruto = art.precioUnitario;
+                const precioUsdBruto = +Number(art.precioUnitario).toFixed(2);
                 const cantidad       = Number(l.CANTIDAD);
                 const desc1 = art.nodto ? 0 : descuentoGlobal;
                 const desc2 = art.nodto ? 0 : (promoDescMap.get(art.codarticulo) ?? 0);
-                const precioFinal = precioUsdBruto * (1 - desc1 / 100) * (1 - desc2 / 100);
+                const precioFinal = +Number(precioUsdBruto * (1 - desc1 / 100) * (1 - desc2 / 100)).toFixed(2);
                 total += precioFinal * cantidad;
                 tabla.rows.add(orderIdGrupo, art.codarticulo, art.ref, 'ZAV', VED,
                     cantidad, precioFinal, desc1, desc2, 0, 0, precioUsdBruto);
