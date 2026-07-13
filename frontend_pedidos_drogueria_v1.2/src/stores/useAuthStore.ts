@@ -23,7 +23,7 @@ export interface UsuarioAuth {
 }
 
 const STORAGE_KEY = 'auth_session';
-const INACTIVITY_MS = 10 * 60 * 1000;
+const INACTIVITY_MS = 7 * 60 * 60 * 1000;
 
 export const useAuthStore = defineStore('auth', () => {
     const stored  = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
