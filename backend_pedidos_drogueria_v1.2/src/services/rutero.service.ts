@@ -177,7 +177,7 @@ export class RuteroService {
             SELECT ARD.NUMSERIE, ARD.NUMFACTURA
             FROM APP_RUTEROS_DETALLE ARD
             INNER JOIN APP_RUTEROS AR ON AR.ID = ARD.IDRUTERO
-            WHERE AR.ESTADO = 'PENDIENTE'
+            WHERE AR.ESTADO IN ('PENDIENTE', 'EN_RUTA')
         `);
         const pendSet = new Set<string>(
             pendRes.recordset.map((r: any) => `${r.NUMSERIE}|${r.NUMFACTURA}`)
