@@ -16,18 +16,18 @@ export class ClientesServices {
                 .input('LIMIT', mssql.Int, limit)
                 .query(`
                     SELECT
-                        CL.CODCLIENTE, CL.NOMBRECLIENTE, CL.CIF,
+                        CL.CODCLIENTE, CL.NOMBRECLIENTE, ISNULL(CL.NOMBRECOMERCIAL,'') AS NOMBRECOMERCIAL, CL.CIF,
                         ISNULL(CL.TELEFONO1, '') TELF, ISNULL(CL.E_MAIL, '') EMAIL,
                         ISNULL((SELECT TOP 1 TRY_CAST(CCL.D1 AS FLOAT) FROM CLIENTESCAMPOSLIBRES CCL WHERE CCL.CODCLIENTE = CL.CODCLIENTE), 0) DESCUENTO
                     FROM CLIENTES CL
-                    WHERE UPPER(ISNULL(CL.NOMBRECLIENTE,'')) LIKE @FILTRO OR UPPER(ISNULL(CL.CIF,'')) LIKE @FILTRO
+                    WHERE UPPER(ISNULL(CL.NOMBRECLIENTE,'')) LIKE @FILTRO OR UPPER(ISNULL(CL.NOMBRECOMERCIAL,'')) LIKE @FILTRO OR UPPER(ISNULL(CL.CIF,'')) LIKE @FILTRO
                     ORDER BY CL.NOMBRECLIENTE
                     OFFSET @OFFSET ROWS FETCH NEXT @LIMIT ROWS ONLY
                 `)
 
             const countResult = await pool.request()
                 .input('FILTRO', mssql.NVarChar, filtro)
-                .query(`SELECT COUNT(*) AS TOTAL FROM CLIENTES CL WHERE UPPER(ISNULL(CL.NOMBRECLIENTE,'')) LIKE @FILTRO OR UPPER(ISNULL(CL.CIF,'')) LIKE @FILTRO`)
+                .query(`SELECT COUNT(*) AS TOTAL FROM CLIENTES CL WHERE UPPER(ISNULL(CL.NOMBRECLIENTE,'')) LIKE @FILTRO OR UPPER(ISNULL(CL.NOMBRECOMERCIAL,'')) LIKE @FILTRO OR UPPER(ISNULL(CL.CIF,'')) LIKE @FILTRO`)
 
             return { success: true, data: result.recordset, total: countResult.recordset[0].TOTAL }
         } catch (error) {
@@ -87,6 +87,7 @@ export class ClientesServices {
 
                         SELECT
                             ISNULL(CL.NOMBRECLIENTE, '') NOMBRECLIENTE,
+                            ISNULL(CL.NOMBRECOMERCIAL, '') NOMBRECOMERCIAL,
                             ISNULL(CL.CODCLIENTE, 0) CODCLIENTE,
                             ISNULL(CL.NIF20, 0) ID,
                             ISNULL(CL.CIF, '') NIT,
@@ -103,8 +104,9 @@ export class ClientesServices {
                             CLIENTES CL
                             LEFT JOIN CLIENTESCAMPOSLIBRES CCL ON CL.CODCLIENTE = CCL.CODCLIENTE
                             LEFT JOIN RUTAS RUT ON RUT.CODRUTA = TRY_CAST(CCL.ZONA AS INT)
-                        WHERE 
+                        WHERE
                             (UPPER(ISNULL(CL.NOMBRECLIENTE, '')) LIKE ('%'+UPPER(REPLACE(LTRIM(RTRIM(@CIF)),' ','%'))+'%')
+                            OR UPPER(ISNULL(CL.NOMBRECOMERCIAL, '')) LIKE ('%'+UPPER(REPLACE(LTRIM(RTRIM(@CIF)),' ','%'))+'%')
                             OR UPPER(ISNULL(CL.CIF, '')) LIKE ('%'+UPPER(REPLACE(LTRIM(RTRIM(@CIF)),' ','%'))+'%')
                             OR UPPER(ISNULL(CL.CODCLIENTE, '')) LIKE ('%'+UPPER(REPLACE(LTRIM(RTRIM(@CIF)),' ','%'))+'%'))`)
             

@@ -172,6 +172,7 @@ const imprimirPDF = async (item: any, sinPrecios: boolean) => {
       cliente: {
         codcliente: item.CLIENTEID,
         nombrecliente: item.NOMBRECLIENTE || `Cliente ${item.CLIENTEID}`,
+        nombrecomercial: item.NOMBRECOMERCIAL || '',
         nit: item.NIF20 || '',
         direccionFiscal: item.DIRECCION1 || '',
         direccionEnvio:  item.RUTA || '',

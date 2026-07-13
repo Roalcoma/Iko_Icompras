@@ -321,6 +321,7 @@ const exportarPDF = async (ordenId?: string) => {
     cliente: {
       codcliente: cliente?.CODCLIENTE,
       nombrecliente: cliente?.NOMBRECLIENTE || 'N/A',
+      nombrecomercial: cliente?.NOMBRECOMERCIAL || '',
       nit: cliente?.NIF20 || cliente?.NIT || '',
       direccionFiscal: cliente?.DIRECCION_FISCAL || cliente?.DIRECCION || '',
       direccionEnvio:  cliente?.DIRECCION_ENVIO || '',

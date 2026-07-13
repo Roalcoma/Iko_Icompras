@@ -38,6 +38,7 @@ export interface PedidoPDFData {
     cliente: {
         codcliente?: string | number;
         nombrecliente: string;
+        nombrecomercial?: string;
         nit?: string;
         direccionFiscal?: string;
         direccionEnvio?: string;
@@ -85,7 +86,7 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
 
     // --- Datos del cliente ---
     doc.setFillColor(248, 248, 248);
-    doc.rect(14, 41, 182, data.estatus ? 36 : 30, 'F');
+    doc.rect(14, 41, 182, data.estatus ? 42 : 36, 'F');
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'normal');
 
@@ -102,15 +103,23 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
     doc.setFont('helvetica', 'normal');
 
     doc.text(`RIF/CI: ${data.cliente.nit || 'N/A'}`, 155, 52);
-    doc.text(`Dir. Fiscal:  ${data.cliente.direccionFiscal || 'N/A'}`, 16, 58);
-    doc.text(`Dir. Envío:   ${data.cliente.direccionEnvio  || 'N/A'}`, 16, 63);
 
-    let datosFin = 73;
+    if (data.cliente.nombrecomercial) {
+        doc.text('N. Comercial:', 16, 57);
+        doc.setFont('helvetica', 'bold');
+        doc.text(data.cliente.nombrecomercial, 40, 57);
+        doc.setFont('helvetica', 'normal');
+    }
+
+    doc.text(`Dir. Fiscal:  ${data.cliente.direccionFiscal || 'N/A'}`, 16, 63);
+    doc.text(`Dir. Envío:   ${data.cliente.direccionEnvio  || 'N/A'}`, 16, 68);
+
+    let datosFin = 79;
     if (data.estatus) {
         doc.setFont('helvetica', 'bold');
-        doc.text(`Estado: ${data.estatus}`, 16, 69);
+        doc.text(`Estado: ${data.estatus}`, 16, 74);
         doc.setFont('helvetica', 'normal');
-        datosFin = 78;
+        datosFin = 84;
     }
 
     const maxDiasProteccion = Math.max(...data.lineas.map(l => l.diasProteccion ?? 0));
