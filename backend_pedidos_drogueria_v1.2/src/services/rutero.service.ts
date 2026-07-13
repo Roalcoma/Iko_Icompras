@@ -213,6 +213,28 @@ export class RuteroService {
 
     // ── Escritura en BD de rutero ────────────────────────────────────────────
 
+    static async buscarFactura(numserie: string, numfactura: number): Promise<any | null> {
+        const pool = await connectDb();
+        const result = await pool.request()
+            .input('NUMSERIE',   mssql.VarChar(20), numserie)
+            .input('NUMFACTURA', mssql.Int,          numfactura)
+            .query(`
+                ${RuteroService.FACTURAS_SELECT}
+                FROM FACTURASVENTA FV WITH(NOLOCK)
+                INNER JOIN CLIENTES CL WITH(NOLOCK)
+                    ON CL.CODCLIENTE = FV.CODCLIENTE
+                OUTER APPLY (
+                    SELECT TOP 1 ZONA FROM CLIENTESCAMPOSLIBRES WITH(NOLOCK)
+                    WHERE CODCLIENTE = CL.CODCLIENTE
+                ) CLC
+                LEFT JOIN RUTAS R WITH(NOLOCK)
+                    ON R.CODRUTA = TRY_CAST(CLC.ZONA AS INT)
+                WHERE FV.NUMSERIE COLLATE DATABASE_DEFAULT = @NUMSERIE COLLATE DATABASE_DEFAULT
+                  AND FV.NUMFACTURA = @NUMFACTURA
+            `);
+        return result.recordset[0] ?? null;
+    }
+
     static async crearRutero(
         codruta: number,
         nombreRuta: string,

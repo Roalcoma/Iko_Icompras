@@ -70,6 +70,7 @@
     <v-card rounded="xl" elevation="2">
       <v-tabs v-model="tab" color="primary" class="border-b">
         <v-tab value="oficina"><v-icon start>mdi-office-building</v-icon>Oficina</v-tab>
+        <v-tab value="documentos"><v-icon start>mdi-file-document-multiple</v-icon>Documentos</v-tab>
         <v-tab value="ruteros" @click="cargarRuteros">
           <v-icon start>mdi-clipboard-list</v-icon>
           Ruteros Activos
@@ -127,6 +128,65 @@
               <v-chip size="x-small" color="blue-darken-1" variant="tonal">{{ item.BULTOS ?? 0 }}</v-chip>
             </template>
           </v-data-table>
+
+          <!-- Agregar factura manualmente -->
+          <v-divider />
+          <div class="pa-3 d-flex align-center gap-3 flex-wrap">
+            <v-icon color="grey-darken-1" size="20">mdi-plus-circle-outline</v-icon>
+            <span class="text-caption text-medium-emphasis">Agregar manualmente:</span>
+            <v-text-field v-model="manualSerie" label="Serie" variant="outlined" density="compact"
+              hide-details style="max-width:120px" @keyup.enter="agregarFacturaManual" />
+            <v-text-field v-model="manualNum" label="N° Factura" type="number" variant="outlined" density="compact"
+              hide-details style="max-width:140px" @keyup.enter="agregarFacturaManual" />
+            <v-btn size="small" color="primary" variant="tonal" :loading="buscandoManual"
+              :disabled="!manualSerie || !manualNum" @click="agregarFacturaManual">
+              Agregar
+            </v-btn>
+          </div>
+        </v-tabs-window-item>
+
+        <!-- TAB DOCUMENTOS -->
+        <v-tabs-window-item value="documentos">
+          <div class="pa-4">
+            <p class="text-caption text-medium-emphasis mb-4">
+              Crea un rutero con documentos ingresados manualmente (facturas de viajes anteriores, etc.).
+              Requiere tener una zona seleccionada arriba.
+            </p>
+
+            <!-- Formulario de entrada -->
+            <div class="d-flex align-center gap-3 flex-wrap mb-4">
+              <v-text-field v-model="docSerie" label="Serie" variant="outlined" density="compact"
+                hide-details style="max-width:120px" @keyup.enter="agregarDocManual" />
+              <v-text-field v-model="docNum" label="N° Documento" type="number" variant="outlined" density="compact"
+                hide-details style="max-width:150px" @keyup.enter="agregarDocManual" />
+              <v-btn color="primary" variant="tonal" :loading="buscandoDoc"
+                :disabled="!docSerie || !docNum" @click="agregarDocManual" prepend-icon="mdi-plus">
+                Agregar
+              </v-btn>
+              <v-spacer />
+              <v-btn color="success" variant="elevated" prepend-icon="mdi-clipboard-check-outline"
+                :disabled="!docsManual.length || !zonaSeleccionada" :loading="creandoDocs"
+                @click="crearRuteroDocumentos">
+                Crear Rutero ({{ docsManual.length }})
+              </v-btn>
+            </div>
+
+            <!-- Lista de documentos agregados -->
+            <v-data-table
+              :headers="headersDocsManual"
+              :items="docsManual"
+              density="compact"
+              :no-data-text="'Agrega documentos con el formulario de arriba'"
+            >
+              <template #item.TOTAL="{ item }">
+                <span class="font-weight-bold">${{ Number(item.TOTAL).toFixed(2) }}</span>
+              </template>
+              <template #item.quitar="{ item }">
+                <v-btn icon="mdi-close" size="x-small" variant="text" color="error"
+                  @click="docsManual = docsManual.filter(d => clave(d) !== clave(item))" />
+              </template>
+            </v-data-table>
+          </div>
         </v-tabs-window-item>
 
         <!-- TAB RUTEROS ACTIVOS -->
@@ -604,6 +664,18 @@ const creando          = ref(false);
 const seleccionadas    = ref<Set<string>>(new Set());
 const snackbar         = ref({ show: false, text: '', color: '' });
 
+// Manual add (oficina tab)
+const manualSerie    = ref('');
+const manualNum      = ref('');
+const buscandoManual = ref(false);
+
+// Documentos tab
+const docsManual  = ref<any[]>([]);
+const docSerie    = ref('');
+const docNum      = ref('');
+const buscandoDoc = ref(false);
+const creandoDocs = ref(false);
+
 watch(zonaSeleccionada, () => {
   facturas.value     = [];
   seleccionadas.value = new Set();
@@ -929,6 +1001,14 @@ const headersRutero = [
   { title: '',        key: 'actions', sortable: false, width: '56px' },
 ];
 
+const headersDocsManual = [
+  { title: 'Factura', key: 'FACTURA_VISUAL', sortable: false },
+  { title: 'Cliente', key: 'CLIENTE' },
+  { title: 'Ruta',    key: 'NOMBRE_RUTA' },
+  { title: 'Total',   key: 'TOTAL', align: 'end' as const },
+  { title: '',        key: 'quitar', sortable: false, width: '48px' },
+];
+
 const clave = (f: any) => `${f.NUMSERIE}-${f.NUMFACTURA}`;
 const notify = (text: string, color: string) => snackbar.value = { show: true, text, color };
 
@@ -953,6 +1033,73 @@ onMounted(async () => {
     zonas.value = res.data.data ?? [];
   } catch { /* silencioso */ }
 });
+
+const fetchFactura = async (serie: string, num: number): Promise<any | null> => {
+  try {
+    const res = await axios.get(`${import.meta.env.VITE_API_URL}/rutero/buscar-factura`, {
+      params: { numserie: serie.toUpperCase().trim(), numfactura: num },
+    });
+    return res.data.success ? res.data.data : null;
+  } catch (e: any) {
+    notify(e.response?.data?.message || 'Factura no encontrada', 'error');
+    return null;
+  }
+};
+
+const agregarFacturaManual = async () => {
+  const num = Number(manualNum.value);
+  if (!manualSerie.value || !num) return;
+  buscandoManual.value = true;
+  try {
+    const factura = await fetchFactura(manualSerie.value, num);
+    if (!factura) return;
+    if (facturas.value.some(f => clave(f) === clave(factura))) {
+      notify('Esa factura ya está en el listado', 'warning'); return;
+    }
+    facturas.value = [...facturas.value, factura];
+    const s = new Set(seleccionadas.value);
+    s.add(clave(factura));
+    seleccionadas.value = s;
+    manualSerie.value = '';
+    manualNum.value   = '';
+    notify(`Factura ${factura.FACTURA_VISUAL} agregada`, 'success');
+  } finally { buscandoManual.value = false; }
+};
+
+const agregarDocManual = async () => {
+  const num = Number(docNum.value);
+  if (!docSerie.value || !num) return;
+  buscandoDoc.value = true;
+  try {
+    const factura = await fetchFactura(docSerie.value, num);
+    if (!factura) return;
+    if (docsManual.value.some(d => clave(d) === clave(factura))) {
+      notify('Ese documento ya está en el listado', 'warning'); return;
+    }
+    docsManual.value = [...docsManual.value, factura];
+    docSerie.value = '';
+    docNum.value   = '';
+  } finally { buscandoDoc.value = false; }
+};
+
+const crearRuteroDocumentos = async () => {
+  if (!docsManual.value.length || !zonaSeleccionada.value) return;
+  const zona = zonaSeleccionada.value;
+  creandoDocs.value = true;
+  try {
+    const res = await axios.post(`${import.meta.env.VITE_API_URL}/rutero/crear`, {
+      codruta:    parseInt(zona.zona),
+      nombreRuta: zona.display,
+      facturas:   docsManual.value.map(f => ({ numserie: f.NUMSERIE, numfactura: f.NUMFACTURA })),
+    });
+    const { numero } = res.data.data;
+    notify(`Rutero de documentos ${numero} creado`, 'success');
+    generarPDF(numero, zona.display, docsManual.value);
+    docsManual.value = [];
+  } catch (e: any) {
+    notify(e.response?.data?.message || 'Error al crear rutero', 'error');
+  } finally { creandoDocs.value = false; }
+};
 
 const buscar = async () => {
   const zona = (zonaSeleccionada.value?.zona ?? '').trim();

@@ -6,6 +6,7 @@ const ruteroRouter = Router();
 
 ruteroRouter.get('/zonas',                     authMiddleware, RuteroController.getZonas);
 ruteroRouter.get('/facturas',                  authMiddleware, RuteroController.getFacturas);
+ruteroRouter.get('/buscar-factura',            authMiddleware, RuteroController.buscarFactura);
 ruteroRouter.post('/crear',                    authMiddleware, RuteroController.crearRutero);
 ruteroRouter.get('/ruteros',                   authMiddleware, RuteroController.getRuteros);
 ruteroRouter.get('/ruteros/:id/facturas',      authMiddleware, RuteroController.getFacturasDeRutero);

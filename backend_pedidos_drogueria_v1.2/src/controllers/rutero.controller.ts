@@ -24,6 +24,19 @@ export class RuteroController {
         }
     }
 
+    static async buscarFactura(req: Request, res: Response): Promise<void> {
+        const numserie   = (req.query.numserie   as string || '').trim().toUpperCase();
+        const numfactura = Number(req.query.numfactura);
+        if (!numserie || isNaN(numfactura)) { res.status(400).json({ success: false, message: 'numserie y numfactura requeridos' }); return; }
+        try {
+            const data = await RuteroService.buscarFactura(numserie, numfactura);
+            if (!data) { res.status(404).json({ success: false, message: 'Factura no encontrada' }); return; }
+            res.json({ success: true, data });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al buscar factura', error: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
     static async crearRutero(req: Request, res: Response): Promise<void> {
         const { codruta, nombreRuta, facturas } = req.body;
         if (!codruta || !Array.isArray(facturas) || !facturas.length) {
