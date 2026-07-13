@@ -583,7 +583,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive, nextTick } from 'vue';
+import { ref, computed, onMounted, reactive, nextTick, watch } from 'vue';
 import axios from 'axios';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -603,6 +603,11 @@ const cargando         = ref(false);
 const creando          = ref(false);
 const seleccionadas    = ref<Set<string>>(new Set());
 const snackbar         = ref({ show: false, text: '', color: '' });
+
+watch(zonaSeleccionada, () => {
+  facturas.value     = [];
+  seleccionadas.value = new Set();
+});
 
 // TTS — Web Speech API nativa
 const hablar = (texto: string) => {
