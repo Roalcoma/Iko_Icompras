@@ -428,14 +428,14 @@
               <p class="text-overline text-grey-darken-2 mb-2 px-1">Ruteros en esta sesión</p>
               <v-row class="mb-3" dense>
                 <v-col v-for="r in sesionPicking" :key="r.ID" cols="6" sm="4" md="3">
-                  <v-card rounded="xl" variant="tonal" color="deep-purple" class="pa-3">
+                  <v-card rounded="xl" variant="tonal" color="deep-purple" class="pa-3" style="cursor:pointer" @click="abrirPendientesRutero(r)">
                     <div class="d-flex align-center gap-2 mb-2">
                       <v-chip size="x-small" color="deep-purple" variant="elevated" class="font-weight-bold">{{ r.NUMERO }}</v-chip>
                       <span class="text-caption font-weight-medium flex-grow-1">{{ r.NOMBRE_RUTA }}</span>
                       <v-btn
                         icon="mdi-close" size="x-small" variant="text" color="error"
                         :loading="liberandoPicking === r.ID"
-                        @click="liberarDeSesion(r)"
+                        @click.stop="liberarDeSesion(r)"
                       />
                     </div>
                     <div class="text-caption text-grey-darken-2">
@@ -636,6 +636,44 @@
       </v-card>
     </v-dialog>
 
+    <!-- Dialog facturas pendientes de picking -->
+    <v-dialog v-model="dialogPendientes.show" max-width="520" scrollable>
+      <v-card rounded="xl">
+        <v-card-title class="d-flex align-center pa-4 pb-2">
+          <v-icon start color="orange">mdi-package-variant-closed</v-icon>
+          Pendientes — Rutero {{ dialogPendientes.rutero?.NUMERO }}
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="dialogPendientes.show = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <div v-if="dialogPendientes.loading" class="text-center pa-6">
+            <v-progress-circular indeterminate color="deep-purple" />
+          </div>
+          <div v-else-if="!dialogPendientes.lineas.length" class="text-center text-success pa-6">
+            <v-icon size="40" class="mb-2">mdi-check-circle</v-icon>
+            <div class="font-weight-bold">Todo completado</div>
+            <div class="text-caption text-grey-darken-1">Todas las cajas han sido escaneadas.</div>
+          </div>
+          <v-list v-else density="compact" lines="two">
+            <v-list-item
+              v-for="l in dialogPendientes.lineas"
+              :key="`${l.numserie}-${l.numfactura}`"
+              class="px-0"
+            >
+              <template #prepend>
+                <v-chip size="x-small" color="orange" variant="tonal" class="mr-3 font-weight-bold">
+                  {{ l.escaneadas }}/{{ l.ncajas }}
+                </v-chip>
+              </template>
+              <v-list-item-title class="text-body-2 font-weight-medium">{{ l.numserie }}-{{ l.numfactura }}</v-list-item-title>
+              <v-list-item-subtitle class="text-caption">{{ l.cliente }}</v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" rounded="pill" timeout="4000">
       {{ snackbar.text }}
     </v-snackbar>
@@ -682,14 +720,15 @@ watch(zonaSeleccionada, () => {
 });
 
 // TTS — Web Speech API nativa
-const hablar = (texto: string) => {
+const hablar = (texto: string, rate = 0.92) => {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const u  = new SpeechSynthesisUtterance(texto);
   u.lang   = 'es-VE';
-  u.rate   = 0.92;
+  u.rate   = rate;
   window.speechSynthesis.speak(u);
 };
+const hablarRapido = (texto: string) => hablar(texto, 4.5);
 
 // Ruteros activos
 const ruteros           = ref<any[]>([]);
@@ -877,7 +916,7 @@ const escanearCajaGlobal = async () => {
   try {
     const res = await axios.post(`${API}/rutero/ruteros/picking/escanear`, { barcode });
     if (res.data.success) {
-      hablar('Bulto Cargado');
+      hablarRapido('Bulto Cargado');
       ultimoResultadoGlobal.value = {
         tipo:   'success',
         titulo: `Caja ${res.data.posicion}/${res.data.ncajas} — ${res.data.factura}`,
@@ -893,23 +932,39 @@ const escanearCajaGlobal = async () => {
       if (r) r.CAJAS_ESCANEADAS = (r.CAJAS_ESCANEADAS ?? 0) + 1;
       verificarPickingCompleto();
     } else if (res.data.duplicado) {
+      hablarRapido('Bulto Cargado Anteriormente');
       ultimoResultadoGlobal.value = {
         tipo:   'warning',
         titulo: res.data.message,
         detalle: `${res.data.cliente}  ·  Rutero ${res.data.ruteroNumero}`,
       };
     } else {
-      hablar('Bulto no Encontrado');
+      hablarRapido('Bulto no Encontrado');
       ultimoResultadoGlobal.value = { tipo: 'error', titulo: res.data.message };
     }
   } catch (e: any) {
-    hablar('Bulto no Encontrado');
+    hablarRapido('Bulto no Encontrado');
     ultimoResultadoGlobal.value = { tipo: 'error', titulo: e.response?.data?.message || 'Error al escanear' };
   } finally {
     escaneandoGlobal.value       = false;
     pickingBarcodeGlobal.value   = '';
     await nextTick();
     barcodeGlobalRef.value?.focus();
+  }
+};
+
+// Dialog facturas pendientes de rutero en sesión
+const dialogPendientes = ref<{ show: boolean; rutero: any; loading: boolean; lineas: any[] }>({
+  show: false, rutero: null, loading: false, lineas: [],
+});
+
+const abrirPendientesRutero = async (r: any) => {
+  dialogPendientes.value = { show: true, rutero: r, loading: true, lineas: [] };
+  try {
+    const res = await axios.get(`${API}/rutero/ruteros/${r.ID}/picking`);
+    dialogPendientes.value.lineas = (res.data.data?.lineas ?? []).filter((l: any) => l.escaneadas < l.ncajas);
+  } catch { /* silencioso */ } finally {
+    dialogPendientes.value.loading = false;
   }
 };
 
