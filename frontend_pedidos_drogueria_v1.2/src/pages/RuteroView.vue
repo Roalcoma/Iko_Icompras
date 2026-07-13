@@ -1280,7 +1280,7 @@ const generarPDF = (numero: string, zonaDisplay: string, lista: any[]) => {
     const totalClientes = grouped.size;
 
     for (const { cod, nombre, items } of grouped.values()) {
-      const subtotalBultos = items.reduce((s, f) => s + (Number(f.BULTOS) || 0), 0);
+      const subtotalBultos = items.reduce((s, f) => s + (Number(f.TOTAL_CAJAS ?? f.BULTOS) || 0), 0);
       totalDocs   += items.length;
       totalBultos += subtotalBultos;
 
@@ -1296,7 +1296,7 @@ const generarPDF = (numero: string, zonaDisplay: string, lista: any[]) => {
         const pedidoText  = f.PEDIDO ? `Ped: ${f.PEDIDO}` : '';
         body.push([
           { content: pedidoText ? `${facturaText}\n${pedidoText}` : facturaText, styles: { fontSize: 7 } },
-          { content: String(f.BULTOS ?? 0), styles: { halign: 'center' } },
+          { content: String(f.TOTAL_CAJAS ?? f.BULTOS ?? 0), styles: { halign: 'center' } },
           { content: '1', styles: { halign: 'center' } },
           { content: '0', styles: { halign: 'center' } },
           '',

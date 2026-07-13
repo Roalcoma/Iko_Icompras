@@ -165,7 +165,17 @@ export class RuteroService {
                            AND PV2.NUMEROALBARAN = AV2.NUMALBARAN
                         WHERE AV2.NUMSERIEFAC COLLATE DATABASE_DEFAULT = FV.NUMSERIE COLLATE DATABASE_DEFAULT
                           AND AV2.NUMFAC = FV.NUMFACTURA
-                    ) AS PEDIDO
+                    ) AS PEDIDO,
+                    ISNULL((
+                        SELECT SUM(CC.NCAJAS)
+                        FROM CONTEO_CAJAS CC WITH(NOLOCK)
+                        INNER JOIN PEDIDOS_CONTEOS PC2 WITH(NOLOCK) ON PC2.IDCONTEO = CC.IDCONTEO
+                        INNER JOIN CABECERA_PED CP2 WITH(NOLOCK) ON CP2.ORDERID = PC2.IDPEDIDO
+                        INNER JOIN PEDVENTACAB PV3 WITH(NOLOCK) ON PV3.SUPEDIDO COLLATE Modern_Spanish_CI_AS = CP2.ORDERID COLLATE Modern_Spanish_CI_AS
+                        INNER JOIN ALBVENTACAB AV3 WITH(NOLOCK) ON AV3.NUMSERIE = PV3.SERIEALBARAN AND AV3.NUMALBARAN = PV3.NUMEROALBARAN AND AV3.N = PV3.NALBARAN
+                        WHERE AV3.NUMSERIEFAC COLLATE DATABASE_DEFAULT = FV.NUMSERIE COLLATE DATABASE_DEFAULT
+                          AND AV3.NUMFAC = FV.NUMFACTURA
+                    ), 0) AS TOTAL_CAJAS
     `;
 
     static async getFacturas(zona: string): Promise<any[]> {
