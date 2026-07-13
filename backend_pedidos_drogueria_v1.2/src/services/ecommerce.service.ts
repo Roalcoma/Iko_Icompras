@@ -176,11 +176,13 @@ export class EcommerceService {
 
                 // Auto-aprobar: insertar directamente en CABECERA_PED
                 const aprob = await this.aprobarPedido(idPedido);
-                fs.renameSync(rutaArchivo, rutaArchivo + '.done');
                 if (aprob.success) {
+                    fs.renameSync(rutaArchivo, rutaArchivo + '.done');
                     console.log(`[Ecommerce] Pedido ${aprob.orderId} creado en Control de Estatus`);
                     importados++;
                 } else {
+                    // Marcar como error pero NO como done — permite revisar qué falló
+                    fs.renameSync(rutaArchivo, rutaArchivo + '.error');
                     console.warn(`[Ecommerce] ${archivo}: no se pudo crear en Control de Estatus — ${aprob.message}`);
                     errores++;
                 }

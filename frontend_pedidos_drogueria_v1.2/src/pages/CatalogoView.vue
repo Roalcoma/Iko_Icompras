@@ -357,7 +357,7 @@ const exportarCatalogoSegmentos = async () => {
     const COLOR_HEADER = '1F4E79'; // azul oscuro
     const COLOR_SUB    = '2E75B6'; // azul medio
     const COLOR_TEXTO  = 'FFFFFF';
-    const fecha = new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const fecha = new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Caracas' });
     const wb = new ExcelJS.Workbook();
 
     // columnas: REF | DESC | P.ACTIVO | PROVEEDOR | MARCA | SECCION | PRECIO | STOCK | CANTIDAD | SUBTOTAL
