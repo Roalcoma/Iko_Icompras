@@ -20,7 +20,7 @@
 
             <div class="d-flex align-center flex-grow-1" style="max-width: 400px;">
               <v-text-field
-                :model-value="carritoStore.clienteSeleccionado ? `${carritoStore.clienteSeleccionado.CODCLIENTE} - ${carritoStore.clienteSeleccionado.NOMBRECLIENTE}` : ''"
+                :model-value="carritoStore.clienteSeleccionado ? `${carritoStore.clienteSeleccionado.CODCLIENTE} - ${carritoStore.clienteSeleccionado.NOMBRECOMERCIAL || carritoStore.clienteSeleccionado.NOMBRECLIENTE}` : ''"
                 label="Cliente / Farmacia"
                 placeholder="Click para buscar..."
                 variant="solo-filled"
@@ -170,7 +170,7 @@
           <v-data-table :headers="headersClientes" :items="clientes" :loading="cargandoClientes" items-per-page="5">
             <template v-slot:item.cliente_concat="{ item }">
               <span class="font-weight-medium">{{ item.CODCLIENTE }}</span>
-              <span class="text-grey ml-1">— {{ item.NOMBRECLIENTE }}</span>
+              <span class="text-grey ml-1">— {{ item.NOMBRECOMERCIAL || item.NOMBRECLIENTE }}</span>
             </template>
             <template v-slot:item.acciones="{ item }">
               <v-btn color="success" size="small" @click="seleccionarCliente(item)">Seleccionar</v-btn>
@@ -333,7 +333,7 @@ const seleccionarCliente = (cliente: any) => {
   carritoStore.clienteSeleccionado = cliente;
   carritoStore.actualizarDescuentosPorCliente();
   modalCliente.value.mostrar = false;
-  lanzarAviso(`Cliente seleccionado: ${cliente.CODCLIENTE} - ${cliente.NOMBRECLIENTE}`, "success");
+  lanzarAviso(`Cliente seleccionado: ${cliente.CODCLIENTE} - ${cliente.NOMBRECOMERCIAL || cliente.NOMBRECLIENTE}`, "success");
 };
 
 // --- MÉTODOS EXCEL ---
