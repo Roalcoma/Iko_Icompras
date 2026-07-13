@@ -159,28 +159,8 @@ export class PedidosServices {
         try {
             const pool = await connectDb();
 
-            // 1. OBTENER REFERENCIAS DE FORMA MASIVA
-            // Extraemos los IDs únicos para la consulta
-            const idsArticulos = [...new Set(lineas.map(l => l.codarticulo))];
-
-            // Consultamos todas las referencias de una sola vez
-            const refRequest = pool.request();
-            const refPlaceholders = idsArticulos.map((id, i) => {
-                refRequest.input(`id${i}`, id);
-                return `@id${i}`;
-            }).join(',');
-
-            const refResult = await refRequest
-                .query(`SELECT CODARTICULO, REFPROVEEDOR FROM ARTICULOS WHERE CODARTICULO IN (${refPlaceholders})`);
-            
-            // Creamos un mapa { id: referencia } para búsqueda rápida
-            const mapaReferencias: Record<number, string> = {};
-            refResult.recordset.forEach(row => {
-                mapaReferencias[row.CODARTICULO] = row.REFPROVEEDOR;
-            });
-
-            // 2. PREPARAR LA TABLA EN MEMORIA
-            const tablaLineas = new mssql.Table(`${esquema}.LINEA_PED`); 
+            // PREPARAR LA TABLA EN MEMORIA
+            const tablaLineas = new mssql.Table(`${esquema}.LINEA_PED`);
             tablaLineas.create = false;
 
             tablaLineas.columns.add('ORDERID', mssql.VarChar(50), { nullable: false });
@@ -190,7 +170,7 @@ export class PedidosServices {
             tablaLineas.columns.add('IDTARIFAV', mssql.Int, { nullable: false });
             tablaLineas.columns.add('PRODUCTCOUNT', mssql.Int, { nullable: false });
             tablaLineas.columns.add('PRECIOUNITARIO', mssql.Float, { nullable: false });
-            
+
             tablaLineas.columns.add('DESCUENTO1', mssql.Float, { nullable: true });
             tablaLineas.columns.add('DESCUENTO2', mssql.Float, { nullable: true });
             tablaLineas.columns.add('DESCUENTO3', mssql.Float, { nullable: true });
@@ -199,20 +179,17 @@ export class PedidosServices {
             tablaLineas.columns.add('PORCENTAJEIVA', mssql.Float, { nullable: true });
             tablaLineas.columns.add('MONTOIVA', mssql.Float, { nullable: true });
 
-            // 3. LLENAR LA TABLA
             for (let i = 0; i < lineas.length; i++) {
                 const {
-                    codarticulo, idtarifav, cantidad, precio,
+                    codarticulo, referencia, idtarifav, cantidad, precio,
                     DESCUENTO1, DESCUENTO2, DESCUENTO3, DESCUENTO4, PRECIOBRUTO,
                     PORCENTAJEIVA, MONTOIVA
                 } = lineas[i];
 
-                const referenciaReal = mapaReferencias[codarticulo] || '';
-
                 tablaLineas.rows.add(
                     orderId,
                     codarticulo,
-                    referenciaReal,
+                    referencia || '',
                     getDbConfig().codAlmacen,
                     idtarifav,
                     cantidad,
