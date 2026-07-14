@@ -676,7 +676,10 @@
                 </v-chip>
               </template>
               <v-list-item-title class="text-body-2 font-weight-medium">{{ l.numserie }}-{{ l.numfactura }}</v-list-item-title>
-              <v-list-item-subtitle class="text-caption">{{ l.cliente }}</v-list-item-subtitle>
+              <v-list-item-subtitle class="text-caption">
+                {{ l.cliente }}
+                <span v-if="l.idconteo" class="ml-2 text-blue-darken-2">· {{ l.idconteo }}</span>
+              </v-list-item-subtitle>
             </v-list-item>
           </v-list>
         </v-card-text>
