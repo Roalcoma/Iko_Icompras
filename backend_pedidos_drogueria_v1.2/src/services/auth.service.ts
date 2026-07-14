@@ -105,9 +105,7 @@ export class AuthService {
 
             const visibilidad = Number(row[CAMPO_VIS] ?? 0);
             const isAdminUser = esAdmin(visibilidad);
-            const modulos = isAdminUser
-                ? MODULOS_SISTEMA.map(m => ({ ...m, puede_ver: true }))
-                : parsearVisibilidad(visibilidad);
+            const modulos = parsearVisibilidad(visibilidad);
             const id = Number(row[CAMPO_ID]);
 
             const usuarioAuth: UsuarioAuth = {

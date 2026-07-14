@@ -1,5 +1,5 @@
 <template>
-  <div class="login-wrapper d-flex align-center justify-center" style="min-height: 100vh; background: linear-gradient(135deg, #0E7490 0%, #164E63 50%, #0F172A 100%);">
+  <div class="login-wrapper d-flex align-center justify-center" :style="{ minHeight: '100vh', background: loginBg }">
 
     <v-btn
         :color="authStore.modoPruebas ? 'warning' : 'white'"
@@ -92,14 +92,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/useAuthStore';
-import { useBrandingStore } from '../stores/useBrandingStore';
+import { useBrandingStore, darkenHex } from '../stores/useBrandingStore';
 
 const authStore     = useAuthStore();
 const brandingStore = useBrandingStore();
-const router   = useRouter();
+const router        = useRouter();
+
+const loginBg = computed(() => {
+  const p = brandingStore.primary;
+  const d = darkenHex(p);
+  return `linear-gradient(135deg, ${p} 0%, ${d} 50%, #0F172A 100%)`;
+});
 
 const password = ref('');
 const showPass = ref(false);
