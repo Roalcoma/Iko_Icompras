@@ -295,8 +295,7 @@ export class EcommerceService {
             .input('RIF', mssql.NVarChar(50), rifCli)
             .query(`
                 SELECT C.CODCLIENTE,
-                       ISNULL(TRY_CAST(CCL.D1 AS FLOAT), 0) AS DESCUENTO_GLOBAL,
-                       ISNULL(TRY_CAST(CCL.CODVENDEDOR AS INT), 0) AS CODVENDEDOR
+                       ISNULL(TRY_CAST(CCL.D1 AS FLOAT), 0) AS DESCUENTO_GLOBAL
                 FROM CLIENTES C
                 LEFT JOIN CLIENTESCAMPOSLIBRES CCL ON CCL.CODCLIENTE = C.CODCLIENTE
                 WHERE C.CODCLIENTE = TRY_CAST(@COD AS INT)
@@ -305,9 +304,9 @@ export class EcommerceService {
         const cliente = clienteRes.recordset[0];
         if (!cliente) return { success: false, message: `Cliente "${codCli}" no encontrado en el sistema` };
 
-        const clienteId: number     = Number(cliente.CODCLIENTE);
+        const clienteId: number       = Number(cliente.CODCLIENTE);
         const descuentoGlobal: number = Number(cliente.DESCUENTO_GLOBAL);
-        const codVendedor: number   = Number(cliente.CODVENDEDOR);
+        const codVendedor: number     = VED;
 
         // 5. Resolver código → CODARTICULO + atributos para separación
         //    Busca por CODBARRAS primero; fallback a CODARTICULO directo
@@ -488,14 +487,7 @@ export class EcommerceService {
                 .input('ESTATUS',     mssql.VarChar(50),  estatus)
                 .query(`
                     INSERT INTO ${esquema}.CABECERA_PED (ORDERID, CLIENTEID, FECHA, ESTATUS, CODVENDEDOR, TOTALPRECIO)
-                    VALUES (@ORDERID, @CLIENTEID, GETDATE(), @ESTATUS,
-                        ISNULL(NULLIF((
-                            SELECT TOP 1 CAST(CCL.CODVENDEDOR AS INT) FROM CLIENTESCAMPOSLIBRES CCL
-                            WHERE CCL.CODCLIENTE = @CLIENTEID
-                              AND CCL.CODVENDEDOR IS NOT NULL
-                              AND LTRIM(RTRIM(CAST(CCL.CODVENDEDOR AS NVARCHAR))) != ''
-                        ), 0), @CODVENDEDOR),
-                        @TOTAL)
+                    VALUES (@ORDERID, @CLIENTEID, GETDATE(), @ESTATUS, @CODVENDEDOR, @TOTAL)
                 `);
 
             await new mssql.Request(tx).bulk(tabla);
