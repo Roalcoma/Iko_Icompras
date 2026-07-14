@@ -30,7 +30,7 @@ const app  = Express();
 const port = process.env.PORT || 9000;
 
 app.use(morgan("dev"));
-app.use(Express.json());
+app.use(Express.json({ limit: '5mb' }));
 app.use(cors());
 app.use(dbModeMiddleware);
 
