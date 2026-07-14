@@ -52,6 +52,10 @@ export class RuteroService {
                 )
             `);
             await pool.request().query(`
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_RUTDET_IDRUTERO' AND object_id=OBJECT_ID('APP_RUTEROS_DETALLE'))
+                    CREATE INDEX IX_RUTDET_IDRUTERO ON APP_RUTEROS_DETALLE (IDRUTERO)
+            `);
+            await pool.request().query(`
                 IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='APP_RUTEROS_CAJAS' AND xtype='U')
                 CREATE TABLE APP_RUTEROS_CAJAS (
                     ID         INT IDENTITY(1,1) PRIMARY KEY,

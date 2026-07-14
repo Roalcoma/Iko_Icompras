@@ -16,6 +16,9 @@ export class ReclamosService {
                     RECLAMO NVARCHAR(MAX) NOT NULL,
                     FECHACREACION DATETIME NOT NULL DEFAULT GETDATE()
                 );
+
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_RECLAMOS_CODCLI' AND object_id=OBJECT_ID('APP_RECLAMOS'))
+                    CREATE INDEX IX_RECLAMOS_CODCLI ON APP_RECLAMOS (CODCLIENTE);
             `);
             console.log('Tabla APP_RECLAMOS verificada.');
         } catch (err) {

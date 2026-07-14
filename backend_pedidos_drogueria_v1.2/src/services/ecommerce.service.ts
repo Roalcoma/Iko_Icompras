@@ -43,6 +43,9 @@ export class EcommerceService {
                 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='APP_ECOMMERCE_PEDIDOS' AND COLUMN_NAME='MENSAJE_ERROR')
                     ALTER TABLE APP_ECOMMERCE_PEDIDOS ADD MENSAJE_ERROR NVARCHAR(500) NULL;
 
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_ECOMP_NUMARCH' AND object_id=OBJECT_ID('APP_ECOMMERCE_PEDIDOS'))
+                    CREATE INDEX IX_ECOMP_NUMARCH ON APP_ECOMMERCE_PEDIDOS (NUMERO_PEDIDO, ARCHIVO);
+
                 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'APP_ECOMMERCE_LINEAS')
                     CREATE TABLE APP_ECOMMERCE_LINEAS (
                         ID              INT IDENTITY PRIMARY KEY,
@@ -52,6 +55,9 @@ export class EcommerceService {
                         CANTIDAD        INT,
                         PRECIO_UNITARIO DECIMAL(18,2)
                     );
+
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_ECOML_IDPEDIDO' AND object_id=OBJECT_ID('APP_ECOMMERCE_LINEAS'))
+                    CREATE INDEX IX_ECOML_IDPEDIDO ON APP_ECOMMERCE_LINEAS (ID_PEDIDO);
             `);
             console.log('[Ecommerce] Tablas verificadas/creadas');
         } catch (err) {

@@ -66,6 +66,10 @@ export class PedidosServices {
                         DETALLES     NVARCHAR(500) NULL
                     )
             `);
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_PEDLOG_ORDERID' AND object_id=OBJECT_ID('${esquema}.APP_PEDIDO_LOG'))
+                    CREATE INDEX IX_PEDLOG_ORDERID ON ${esquema}.APP_PEDIDO_LOG (ORDERID)
+            `);
             console.log('Tablas de pedidos verificadas.');
         } catch (err) {
             console.error('Advertencia en PedidosServices.initTablas:', err);
