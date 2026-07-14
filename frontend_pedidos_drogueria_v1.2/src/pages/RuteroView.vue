@@ -337,14 +337,23 @@
                       <span>${{ Number(item.TOTAL).toFixed(2) }}</span>
                     </template>
                     <template #item.actions="{ item }">
-                      <v-btn
-                        v-if="!item.FECHARECIBIDO"
-                        size="x-small" color="success" variant="tonal"
-                        icon="mdi-check"
-                        :loading="confirmandoFactura === clave(item)"
-                        @click.stop="abrirDialogFecha(r, item)"
-                      />
-                      <span v-else class="text-caption text-grey-darken-1">{{ item.FECHARECIBIDO?.toString().substring(0,10) }}</span>
+                      <div class="d-flex gap-1">
+                        <v-btn
+                          v-if="!item.FECHARECIBIDO"
+                          size="x-small" color="success" variant="tonal"
+                          icon="mdi-check"
+                          :loading="confirmandoFactura === clave(item)"
+                          @click.stop="abrirDialogFecha(r, item)"
+                        />
+                        <v-btn
+                          v-if="r.ESTADO === 'PENDIENTE' && !item.FECHARECIBIDO"
+                          size="x-small" color="error" variant="tonal"
+                          icon="mdi-delete-outline"
+                          :loading="quitandoFactura === clave(item)"
+                          @click.stop="quitarFacturaDeRutero(r, item)"
+                        />
+                        <span v-if="item.FECHARECIBIDO" class="text-caption text-grey-darken-1">{{ item.FECHARECIBIDO?.toString().substring(0,10) }}</span>
+                      </div>
                     </template>
                   </v-data-table>
                   </div>
@@ -736,6 +745,7 @@ const cargandoRuteros   = ref(false);
 const facturasRutero    = reactive<Record<number, any[]>>({});
 const confirmandoRutero = ref<number | null>(null);
 const confirmandoFactura = ref<string | null>(null);
+const quitandoFactura   = ref<string | null>(null);
 const filtroRuteros     = ref({ numero: '', factura: '', pedido: '' });
 const paginaRuteros     = ref(1);
 const totalRuteros      = ref(0);
@@ -1053,7 +1063,7 @@ const headersRutero = [
   { title: 'Cliente', key: 'CLIENTE' },
   { title: 'Bultos',  key: 'BULTOS',  align: 'center' as const },
   { title: 'Total',   key: 'TOTAL',   align: 'end'    as const },
-  { title: '',        key: 'actions', sortable: false, width: '56px' },
+  { title: '',        key: 'actions', sortable: false, width: '100px' },
 ];
 
 const headersDocsManual = [
@@ -1255,6 +1265,22 @@ const confirmarFacturaConFecha = async () => {
   const { idrutero, item, fecha } = dialogFecha.value;
   dialogFecha.value.show = false;
   await confirmarFactura(idrutero, item, fecha);
+};
+
+const quitarFacturaDeRutero = async (r: any, item: any) => {
+  const k = clave(item);
+  quitandoFactura.value = k;
+  try {
+    await axios.delete(`${API}/rutero/ruteros/${r.ID}/facturas`, {
+      data: { numserie: item.NUMSERIE, numfactura: item.NUMFACTURA }
+    });
+    facturasRutero[r.ID] = (facturasRutero[r.ID] ?? []).filter(f => clave(f) !== k);
+    notify('Factura quitada del rutero', 'success');
+  } catch (e: any) {
+    notify(e.response?.data?.message || e.message || 'Error al quitar factura', 'error');
+  } finally {
+    quitandoFactura.value = null;
+  }
 };
 
 const confirmarRuteroCompleto = async (id: number) => {

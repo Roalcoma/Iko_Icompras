@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { mssql, connectDb } from '../db/db.conection';
+import mssql from 'mssql';
+import { connectDb } from '../db/db.conection';
 import { PromocionesService } from './promociones.service';
 import { getDbConfig }        from './dbconfig.service';
 
@@ -34,8 +35,11 @@ export class EcommerceService {
                         TOTAL          DECIMAL(18,2),
                         ARCHIVO        NVARCHAR(500),
                         PROCESADO      BIT NOT NULL DEFAULT 0,
-                        FECHA_IMPORT   DATETIME NOT NULL DEFAULT GETDATE()
+                        FECHA_IMPORT   DATETIME NOT NULL DEFAULT GETDATE(),
+                        MENSAJE_ERROR  NVARCHAR(500) NULL
                     );
+                IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='APP_ECOMMERCE_PEDIDOS' AND COLUMN_NAME='MENSAJE_ERROR')
+                    ALTER TABLE APP_ECOMMERCE_PEDIDOS ADD MENSAJE_ERROR NVARCHAR(500) NULL;
 
                 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'APP_ECOMMERCE_LINEAS')
                     CREATE TABLE APP_ECOMMERCE_LINEAS (
@@ -184,11 +188,18 @@ export class EcommerceService {
                     // Marcar como error pero NO como done — permite revisar qué falló
                     fs.renameSync(rutaArchivo, rutaArchivo + '.error');
                     console.warn(`[Ecommerce] ${archivo}: no se pudo crear en Control de Estatus — ${aprob.message}`);
+                    try {
+                        await pool.request()
+                            .input('ID',  mssql.Int,          idPedido)
+                            .input('MSG', mssql.NVarChar(500), aprob.message.substring(0, 500))
+                            .query(`UPDATE APP_ECOMMERCE_PEDIDOS SET MENSAJE_ERROR = @MSG WHERE ID = @ID`);
+                    } catch {}
                     errores++;
                 }
             } catch (e) {
                 console.error(`[Ecommerce] Error al importar ${archivo}:`, e);
                 errores++;
+                try { fs.renameSync(rutaArchivo, rutaArchivo + '.error'); } catch {}
             }
         }
 
@@ -393,8 +404,8 @@ export class EcommerceService {
         if (!gruposConLineas.length)
             return { success: false, message: 'Ningún artículo del pedido fue encontrado en el sistema' };
 
-        // 8. Helper: armar tabla e insertar un grupo
-        const insertarGrupo = async (sufijo: string, items: GrupoLinea[]) => {
+        // 8. Helper: armar tabla e insertar un grupo (dentro de una transacción)
+        const insertarGrupo = async (sufijo: string, items: GrupoLinea[], tx: mssql.Transaction) => {
             const orderIdGrupo = sufijo === 'normal' ? orderId : orderId + sufijo;
             const estatus = sufijo === 'P' ? 'APROBACION PSICOTROPICOS' : 'PENDIENTE';
 
@@ -413,7 +424,6 @@ export class EcommerceService {
             tabla.columns.add('DESCUENTO4',     mssql.Float,       { nullable: true  });
             tabla.columns.add('PRECIOBRUTO',    mssql.Float,       { nullable: true  });
 
-            // Consolidar líneas duplicadas del mismo artículo sumando cantidades
             const consolidated = new Map<number, { linea: any; art: (typeof items)[0]['art'] }>();
             for (const { linea: l, art } of items) {
                 const ex = consolidated.get(art.codarticulo);
@@ -433,7 +443,7 @@ export class EcommerceService {
                     cantidad, precioFinal, desc1, desc2, 0, 0, precioUsdBruto);
             }
 
-            await pool.request()
+            await new mssql.Request(tx)
                 .input('ORDERID',     mssql.NVarChar(50), orderIdGrupo)
                 .input('CLIENTEID',   mssql.Int,          clienteId)
                 .input('CODVENDEDOR', mssql.Int,          codVendedor)
@@ -451,9 +461,9 @@ export class EcommerceService {
                         @TOTAL)
                 `);
 
-            await pool.request().bulk(tabla);
+            await new mssql.Request(tx).bulk(tabla);
 
-            await pool.request()
+            await new mssql.Request(tx)
                 .input('OID',     mssql.VarChar(50), orderIdGrupo)
                 .input('ESTATUS', mssql.VarChar(50), estatus)
                 .query(`
@@ -464,10 +474,18 @@ export class EcommerceService {
             return orderIdGrupo;
         };
 
-        // 9. Insertar cada grupo
+        // 9. Insertar cada grupo dentro de una transacción — si falla alguno, todos se revierten
         const idsCreados: string[] = [];
-        for (const [sufijo, items] of gruposConLineas)
-            idsCreados.push(await insertarGrupo(sufijo, items));
+        const tx = new mssql.Transaction(pool);
+        await tx.begin();
+        try {
+            for (const [sufijo, items] of gruposConLineas)
+                idsCreados.push(await insertarGrupo(sufijo, items, tx));
+            await tx.commit();
+        } catch (err) {
+            await tx.rollback();
+            throw err;
+        }
 
         // 10. Marcar procesado
         await pool.request()

@@ -907,4 +907,28 @@ export class RuteroService {
             .input('IDRUTERO', mssql.Int, idrutero)
             .query(`UPDATE APP_RUTEROS SET ESTADO = 'ENTREGADO' WHERE ID = @IDRUTERO`);
     }
+
+    static async quitarFacturaDeRutero(idrutero: number, numserie: string, numfactura: number): Promise<void> {
+        const ruteroDB = await connectRuteroDB();
+
+        // Solo se puede quitar de ruteros PENDIENTE (no confirmados ni entregados)
+        const check = await ruteroDB.request()
+            .input('IDRUTERO', mssql.Int, idrutero)
+            .query(`SELECT ESTADO FROM APP_RUTEROS WHERE ID = @IDRUTERO`);
+
+        if (!check.recordset.length) throw new Error('Rutero no encontrado');
+        if (check.recordset[0].ESTADO !== 'PENDIENTE') throw new Error('Solo se pueden quitar facturas de ruteros PENDIENTE');
+
+        await ruteroDB.request()
+            .input('IDRUTERO',   mssql.Int,        idrutero)
+            .input('NUMSERIE',   mssql.VarChar(20), numserie)
+            .input('NUMFACTURA', mssql.Int,         numfactura)
+            .query(`
+                DELETE FROM APP_RUTEROS_DETALLE
+                WHERE IDRUTERO = @IDRUTERO
+                  AND NUMSERIE COLLATE DATABASE_DEFAULT = @NUMSERIE COLLATE DATABASE_DEFAULT
+                  AND NUMFACTURA = @NUMFACTURA
+                  AND FECHARECIBIDO IS NULL
+            `);
+    }
 }

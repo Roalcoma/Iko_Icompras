@@ -185,4 +185,21 @@ export class RuteroController {
             res.status(500).json({ success: false, message: 'Error al confirmar rutero', error: error instanceof Error ? error.message : String(error) });
         }
     }
+
+    static async quitarFactura(req: Request, res: Response): Promise<void> {
+        const id         = Number(req.params.id);
+        const numserie   = String(req.body.numserie   ?? '').trim().toUpperCase();
+        const numfactura = Number(req.body.numfactura);
+        if (!numserie || isNaN(numfactura)) {
+            res.status(400).json({ success: false, message: 'numserie y numfactura requeridos' }); return;
+        }
+        try {
+            await RuteroService.quitarFacturaDeRutero(id, numserie, numfactura);
+            res.json({ success: true, message: 'Factura quitada del rutero' });
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            res.status(msg.includes('PENDIENTE') || msg.includes('no encontrado') ? 400 : 500)
+               .json({ success: false, message: msg });
+        }
+    }
 }
