@@ -56,6 +56,13 @@
           <v-chip v-if="item.PROCESADO" color="success" size="small" variant="flat" class="font-weight-bold">
             EC-{{ item.NUMERO_PEDIDO }}
           </v-chip>
+          <v-tooltip v-else-if="item.MENSAJE_ERROR" :text="item.MENSAJE_ERROR" location="top" max-width="400">
+            <template v-slot:activator="{ props }">
+              <v-chip v-bind="props" color="error" size="small" variant="flat" class="font-weight-bold" prepend-icon="mdi-alert-circle">
+                Error
+              </v-chip>
+            </template>
+          </v-tooltip>
           <v-chip v-else color="warning" size="small" variant="flat" class="font-weight-bold">
             Pendiente
           </v-chip>
@@ -84,6 +91,9 @@
           <v-btn icon="mdi-close" variant="text" color="white" @click="modalLineas.mostrar = false" />
         </v-card-title>
         <v-card-text class="pa-4">
+          <v-alert v-if="modalLineas.pedido?.MENSAJE_ERROR" type="error" variant="tonal" density="compact" class="mb-4" prepend-icon="mdi-alert-circle">
+            <strong>Error de importación:</strong> {{ modalLineas.pedido.MENSAJE_ERROR }}
+          </v-alert>
           <div class="mb-4 d-flex flex-wrap gap-4">
             <div><span class="text-caption text-grey">RIF:</span> <strong>{{ modalLineas.pedido?.RIF }}</strong></div>
             <div><span class="text-caption text-grey">Estatus:</span> <strong>{{ modalLineas.pedido?.ESTATUS }}</strong></div>

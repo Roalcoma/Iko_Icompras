@@ -117,6 +117,7 @@ export class EcommerceService {
 
         for (const archivo of archivos) {
             const rutaArchivo = path.join(ruta, archivo);
+            let idPedidoActual: number | null = null;
             try {
                 const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
                 const parsed = this.parsearArchivo(contenido, archivo);
@@ -163,6 +164,7 @@ export class EcommerceService {
                 }
 
                 const idPedido: number = insRes.recordset[0].ID;
+                idPedidoActual = idPedido;
 
                 for (const l of parsed.lineas) {
                     await pool.request()
@@ -196,10 +198,20 @@ export class EcommerceService {
                     } catch {}
                     errores++;
                 }
-            } catch (e) {
+            } catch (e: any) {
+                const msg = (e?.message ?? String(e)).substring(0, 500);
                 console.error(`[Ecommerce] Error al importar ${archivo}:`, e);
                 errores++;
                 try { fs.renameSync(rutaArchivo, rutaArchivo + '.error'); } catch {}
+                if (idPedidoActual !== null) {
+                    try {
+                        const pool2 = await connectDb();
+                        await pool2.request()
+                            .input('ID',  mssql.Int,           idPedidoActual)
+                            .input('MSG', mssql.NVarChar(500), msg)
+                            .query(`UPDATE APP_ECOMMERCE_PEDIDOS SET MENSAJE_ERROR = @MSG WHERE ID = @ID`);
+                    } catch {}
+                }
             }
         }
 
