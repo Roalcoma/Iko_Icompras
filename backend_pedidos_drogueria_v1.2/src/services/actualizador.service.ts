@@ -143,9 +143,6 @@ export async function ejecutarActualizacion(): Promise<ResultadoActualizacion> {
                     fs.mkdirSync(dst, { recursive: true });
                     copiarContando(src, dst, relativa);
                 } else {
-                    if (fs.existsSync(dst)) {
-                        try { fs.chmodSync(dst, 0o666); } catch {}
-                    }
                     fs.copyFileSync(src, dst);
                     archivosCopiados++;
                 }
