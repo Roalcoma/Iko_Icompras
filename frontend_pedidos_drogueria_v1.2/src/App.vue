@@ -68,7 +68,7 @@
         prepend-icon="mdi-trending-up"
         size="small"
       >
-        TASA: Bs. {{ carritoStore.tasa.toFixed(2) }}
+        TASA: Bs. {{ carritoStore.tasa }}
       </v-chip>
 
       <v-menu>

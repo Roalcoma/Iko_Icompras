@@ -12,7 +12,7 @@
               </v-avatar>
               <div>
                 <h1 class="text-h5 font-weight-bold mb-0" style="line-height: 1; color: #164E63;">Catálogo</h1>
-                <span class="text-caption text-medium-emphasis">Tasa: Bs. {{ carritoStore.tasa.toFixed(2) }}</span>
+                <span class="text-caption text-medium-emphasis">Tasa: Bs. {{ carritoStore.tasa }}</span>
               </div>
             </div>
 

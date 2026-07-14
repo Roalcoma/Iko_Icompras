@@ -320,7 +320,7 @@ WHERE AVC.NUMSERIEFAC = @NS AND AVC.NUMFAC = @NF AND VENTA.UNIDADESTOTAL <> 0
             RazonSocial: p.NOMBRECLIENTE || '',
             DireccionEnvio: p.DIRECCION_CLIENTE || '',
             Vendedor: p.NOMVENDEDOR || '',
-            TasaVal: tasa, TasaStr: fmtNum(tasa),
+            TasaVal: tasa, TasaStr: String(tasa),
             CondicionPago: p.FORMA_PAGO || 'CONTADO',
             RIF: p.RIF_CLIENTE || '',
             CodCliente: p.CODCLIENTE || '',
