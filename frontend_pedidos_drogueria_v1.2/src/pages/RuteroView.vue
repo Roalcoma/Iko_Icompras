@@ -737,7 +737,7 @@ const hablar = (texto: string, rate = 0.92) => {
   u.rate   = rate;
   window.speechSynthesis.speak(u);
 };
-const hablarRapido = (texto: string) => hablar(texto, 2.5);
+const hablarRapido = (texto: string) => hablar(texto, 1.3);
 
 // Ruteros activos
 const ruteros           = ref<any[]>([]);
