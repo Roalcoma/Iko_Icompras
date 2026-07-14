@@ -256,7 +256,7 @@ import { ref, onMounted } from 'vue';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
-import logoEmpresaUrl from '../assets/drogueria_logo.png';
+import { useBrandingStore } from '../stores/useBrandingStore';
 import { useCarritoStore } from '../stores/useCarritoStore';
 import MontoDisplay from '../components/MontoDisplay.vue';
 
@@ -348,7 +348,7 @@ const exportarCatalogoSegmentos = async () => {
     const productos: any[] = res.data.data;
     if (!productos.length) { lanzarAviso('No hay artículos con precio en la tarifa base', 'warning'); return; }
 
-    const logoBuffer = await fetch(logoEmpresaUrl).then(r => r.arrayBuffer());
+    const logoBuffer = await fetch(useBrandingStore().logo).then(r => r.arrayBuffer());
     const FORMATO_DOLAR = '"$"#,##0.00';
     const FILA_HEADER  = 6;  // fila de encabezados de columna
     const FILA_SUB     = 7;  // fila con sub-etiquetas (Pedido / Total)

@@ -697,7 +697,7 @@ import { ref, computed, onMounted, reactive, nextTick, watch } from 'vue';
 import axios from 'axios';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import logoUrl from '../assets/drogueria_logo.png';
+import { useBrandingStore } from '../stores/useBrandingStore';
 import { useAuthStore } from '../stores/useAuthStore';
 
 const authStore = useAuthStore();
@@ -1318,7 +1318,7 @@ const generarPDF = (numero: string, zonaDisplay: string, lista: any[]) => {
   const fecha = new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Caracas' });
   const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
   const logo  = new Image();
-  logo.src    = logoUrl;
+  logo.src    = useBrandingStore().logo;
 
   const build = () => {
     const addHeader = (pageNum: number, totalPages: number) => {

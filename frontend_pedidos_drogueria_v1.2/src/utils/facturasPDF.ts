@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import logoUrl from '../assets/drogueria_logo.png';
+import { useBrandingStore } from '../stores/useBrandingStore';
 
 export interface FacturaPDFHeader {
     Pedido: string; FacturaNo: string; Fecha: string; FechaVencimiento: string;
@@ -34,6 +34,7 @@ export async function generarFacturaPDF(data: FacturaPDFData): Promise<Blob> {
     const W = doc.internal.pageSize.getWidth();   // 215.9 mm
     const H = doc.internal.pageSize.getHeight();  // 279.4 mm
     const M = 10; // left margin mm
+    const logoUrl = useBrandingStore().logo;
 
     // ── Logo ────────────────────────────────────────────────────────────────
     try {

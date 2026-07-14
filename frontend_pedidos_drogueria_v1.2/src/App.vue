@@ -10,7 +10,7 @@
     >
       <div class="pa-6 d-flex flex-column align-center">
         <div class="mb-3 d-flex justify-center" style="width:100%;max-width:160px;">
-          <v-img :src="logoEmpresaUrl" alt="logo" contain width="100%" />
+          <v-img :src="brandingStore.logo" alt="logo" contain width="100%" />
         </div>
         <h2 class="text-h6 font-weight-bold text-white mb-0" style="letter-spacing:0.5px;">Terminal de Ventas</h2>
         <span class="text-caption text-cyan-lighten-3">Droguería Intercontinental</span>
@@ -116,19 +116,39 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { useTheme } from 'vuetify';
 import axios from 'axios';
 import { useRouter } from 'vue-router';
 import { useCarritoStore } from './stores/useCarritoStore';
 import { useAuthStore }    from './stores/useAuthStore';
 import { usePromocionesStore } from './stores/usePromocionesStore';
-import logoEmpresaUrl from './assets/drogueria_logo.png';
+import { useBrandingStore, darkenHex, lightenHex } from './stores/useBrandingStore';
 
 const drawer        = ref(true);
 const errorTasa     = ref(false);
-const carritoStore   = useCarritoStore();
-const authStore      = useAuthStore();
+const carritoStore     = useCarritoStore();
+const authStore        = useAuthStore();
 const promocionesStore = usePromocionesStore();
-const router         = useRouter();
+const brandingStore    = useBrandingStore();
+const router           = useRouter();
+const theme            = useTheme();
+
+const applyBrandingTheme = () => {
+  const p = brandingStore.primary;
+  const s = brandingStore.secondary;
+  theme.themes.value.light.colors['primary']           = p;
+  theme.themes.value.light.colors['primary-darken-1']  = darkenHex(p);
+  theme.themes.value.light.colors['secondary']         = s;
+  theme.themes.value.light.colors['secondary-darken-1']= darkenHex(s);
+  theme.themes.value.light.colors['success']           = s;
+  theme.themes.value.dark.colors['primary']            = lightenHex(p);
+  theme.themes.value.dark.colors['primary-darken-1']   = p;
+  theme.themes.value.dark.colors['secondary']          = lightenHex(s);
+  theme.themes.value.dark.colors['secondary-darken-1'] = s;
+  theme.themes.value.dark.colors['success']            = lightenHex(s);
+};
+
+watch([() => brandingStore.primary, () => brandingStore.secondary], applyBrandingTheme);
 
 const totalArticulos = computed(() =>
   carritoStore.articulos.reduce((t, i) => t + i.cantidad, 0)
@@ -148,7 +168,9 @@ const handleLogout = () => {
   router.push('/login');
 };
 
-onMounted(() => {
+onMounted(async () => {
+  await brandingStore.init();
+  applyBrandingTheme();
   if (authStore.isAuthenticated) {
     obtenerTasa();
     promocionesStore.cargarVigentes().then(() => carritoStore.recalcularPromociones());

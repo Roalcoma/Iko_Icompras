@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import logoEmpresaUrl from '../assets/drogueria_logo.png';
+import { useBrandingStore } from '../stores/useBrandingStore';
 
 export interface LineaPDF {
     codigo: string | number;
@@ -62,7 +62,7 @@ export async function generarPedidoPDF(data: PedidoPDFData): Promise<void> {
         await new Promise<void>((resolve, reject) => {
             img.onload = () => resolve();
             img.onerror = reject;
-            img.src = logoEmpresaUrl;
+            img.src = useBrandingStore().logo;
         });
         doc.addImage(img, 'PNG', 14, 5, 42, 22);
     } catch { /* si falla, el PDF sigue sin logo */ }

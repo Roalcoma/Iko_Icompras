@@ -29,7 +29,7 @@
 
         <div class="text-center mb-8">
           <v-img
-            :src="logoEmpresaUrl"
+            :src="brandingStore.logo"
             alt="logo"
             max-width="140"
             class="mx-auto mb-4"
@@ -95,9 +95,10 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/useAuthStore';
-import logoEmpresaUrl from '../assets/drogueria_logo.png';
+import { useBrandingStore } from '../stores/useBrandingStore';
 
-const authStore = useAuthStore();
+const authStore     = useAuthStore();
+const brandingStore = useBrandingStore();
 const router   = useRouter();
 
 const password = ref('');

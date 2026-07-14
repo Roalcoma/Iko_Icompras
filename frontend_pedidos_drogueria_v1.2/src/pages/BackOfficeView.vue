@@ -516,6 +516,53 @@
       </v-card-text>
     </v-card>
 
+    <!-- Apariencia del sistema -->
+    <v-card rounded="xl" elevation="2" class="mt-6">
+      <v-card-title class="pa-4 d-flex align-center">
+        <v-icon color="purple-darken-2" class="mr-2">mdi-palette</v-icon>
+        <span class="font-weight-bold">Apariencia del Sistema</span>
+      </v-card-title>
+      <v-divider />
+      <v-card-text class="pa-4">
+        <p class="text-caption text-grey mb-4">
+          Personaliza el logo y los colores principales del aplicativo. Los cambios se aplican a todos los usuarios inmediatamente.
+        </p>
+        <v-row dense align="center" class="mb-4">
+          <v-col cols="12" sm="auto">
+            <v-img :src="brandingLogoPreview" max-width="120" max-height="60" contain class="rounded border" />
+          </v-col>
+          <v-col>
+            <v-btn variant="tonal" color="primary" prepend-icon="mdi-upload" @click="seleccionarLogo">
+              Subir logo
+            </v-btn>
+            <input ref="inputLogo" type="file" accept="image/png,image/jpeg,image/svg+xml" class="d-none" @change="onLogoSeleccionado" />
+            <v-btn v-if="brandingPreview.logoBase64" variant="text" color="error" class="ml-2" @click="brandingPreview.logoBase64 = null">
+              Quitar logo
+            </v-btn>
+          </v-col>
+        </v-row>
+        <v-row dense class="mb-4">
+          <v-col cols="12" sm="6">
+            <div class="text-caption font-weight-medium mb-1">Color primario</div>
+            <div class="d-flex align-center gap-2">
+              <input type="color" v-model="brandingPreview.primary" style="width:44px;height:36px;border:none;cursor:pointer;border-radius:6px;" />
+              <v-text-field v-model="brandingPreview.primary" variant="outlined" density="compact" hide-details style="max-width:130px;" />
+            </div>
+          </v-col>
+          <v-col cols="12" sm="6">
+            <div class="text-caption font-weight-medium mb-1">Color secundario</div>
+            <div class="d-flex align-center gap-2">
+              <input type="color" v-model="brandingPreview.secondary" style="width:44px;height:36px;border:none;cursor:pointer;border-radius:6px;" />
+              <v-text-field v-model="brandingPreview.secondary" variant="outlined" density="compact" hide-details style="max-width:130px;" />
+            </div>
+          </v-col>
+        </v-row>
+        <v-btn color="purple-darken-2" variant="elevated" :loading="guardandoBranding" prepend-icon="mdi-content-save" @click="guardarBranding">
+          Guardar apariencia
+        </v-btn>
+      </v-card-text>
+    </v-card>
+
     <!-- Dialog: confirmar inicialización de BD -->
     <v-dialog v-model="modalInicializarBD" max-width="480" persistent>
       <v-card rounded="xl">
@@ -548,6 +595,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
+import { useBrandingStore } from '../stores/useBrandingStore';
 
 const API = `${import.meta.env.VITE_API_URL}/auth`;
 
@@ -939,6 +987,43 @@ const actualizarApp = async () => {
       log: ['No se pudo contactar al backend.'],
     };
   } finally { actualizando.value = false; }
+};
+
+// ─── Apariencia del sistema ───────────────────────────────────
+const brandingStore   = useBrandingStore();
+const inputLogo       = ref<HTMLInputElement | null>(null);
+const guardandoBranding = ref(false);
+const brandingPreview = ref({
+  primary:    brandingStore.primary,
+  secondary:  brandingStore.secondary,
+  logoBase64: brandingStore.logoBase64 as string | null,
+});
+
+const brandingLogoPreview = computed<string>(() => brandingPreview.value.logoBase64 ?? brandingStore.logo);
+
+const seleccionarLogo = () => inputLogo.value?.click();
+
+const onLogoSeleccionado = (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { brandingPreview.value.logoBase64 = reader.result as string; };
+  reader.readAsDataURL(file);
+  (e.target as HTMLInputElement).value = '';
+};
+
+const guardarBranding = async () => {
+  guardandoBranding.value = true;
+  try {
+    await brandingStore.update({
+      primary:    brandingPreview.value.primary,
+      secondary:  brandingPreview.value.secondary,
+      logoBase64: brandingPreview.value.logoBase64,
+    });
+    mostrarSnack('Apariencia guardada correctamente', 'success');
+  } catch {
+    mostrarSnack('Error al guardar apariencia', 'error');
+  } finally { guardandoBranding.value = false; }
 };
 
 onMounted(async () => {
