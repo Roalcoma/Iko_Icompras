@@ -505,7 +505,9 @@ export class EcommerceService {
                 .input('ESTATUS',     mssql.VarChar(50),  estatus)
                 .query(`
                     INSERT INTO ${esquema}.CABECERA_PED (ORDERID, CLIENTEID, FECHA, ESTATUS, CODVENDEDOR, TOTALPRECIO)
-                    VALUES (@ORDERID, @CLIENTEID, GETDATE(), @ESTATUS, @CODVENDEDOR, @TOTAL)
+                    VALUES (@ORDERID, @CLIENTEID, GETDATE(), @ESTATUS,
+                        ISNULL(NULLIF((SELECT TOP 1 CAST(CCL.CODVENDEDOR AS INT) FROM CLIENTESCAMPOSLIBRES CCL WHERE CCL.CODCLIENTE = @CLIENTEID AND CCL.CODVENDEDOR IS NOT NULL AND LTRIM(RTRIM(CAST(CCL.CODVENDEDOR AS NVARCHAR)))!=''), 0), @CODVENDEDOR),
+                        @TOTAL)
                 `);
 
             await new mssql.Request(tx).bulk(tabla);
