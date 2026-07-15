@@ -58,7 +58,8 @@ export class FacturasService {
     }) {
         const pool = await connectDb();
         const { serie, desde, hasta, cliente, ruta, page = 1, limit = 100 } = filters;
-        const offset = (page - 1) * limit;
+        const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
+        const offset = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
 
         const req = pool.request();
         if (serie)   req.input('SERIE',   serie);
@@ -67,7 +68,7 @@ export class FacturasService {
         if (cliente) req.input('CLIENTE', `%${cliente}%`);
         if (ruta)    req.input('RUTA',    ruta);
         req.input('OFFSET', offset);
-        req.input('LIMIT',  limit);
+        req.input('LIMIT',  safeLimit);
 
         const where = [
             serie   ? 'FV.NUMSERIE = @SERIE'                               : null,

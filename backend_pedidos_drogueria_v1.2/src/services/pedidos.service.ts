@@ -241,9 +241,10 @@ export class PedidosServices {
                              fechaDesde?: string, fechaHasta?: string, esPsicotropico?: boolean,
                              nombreCliente?: string, soloFacturado?: boolean) {
         try {
-            let validPage = Math.max(1, Number(page) || 1);
-            let validLimit = Math.max(1, Number(limit) || 10);
-            const offset = (validPage - 1) * validLimit;
+            const isAll = Number(limit) === -1;
+            let validPage = isAll ? 1 : Math.max(1, Number(page) || 1);
+            let validLimit = isAll ? 10000 : Math.max(1, Number(limit) || 10);
+            const offset = isAll ? 0 : (validPage - 1) * validLimit;
 
             const pool = await connectDb();
             const req = pool.request()
@@ -840,11 +841,12 @@ export class PedidosServices {
     static async getAuditoria(orderId?: string, usuario?: string, page = 1, limit = 50) {
         try {
             const pool = await connectDb();
-            const offset = (page - 1) * limit;
+            const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
+            const offset = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
             const result = await pool.request()
                 .input('ORDERID',    mssql.VarChar(50),   orderId  ? `%${orderId}%`  : '%')
                 .input('USUARIO',    mssql.VarChar(100),  usuario  ? `%${usuario}%`  : '%')
-                .input('LIMIT',      mssql.Int, limit)
+                .input('LIMIT',      mssql.Int, safeLimit)
                 .input('OFFSET',     mssql.Int, offset)
                 .query(`
                     SELECT ID, ORDERID, EST_ANTERIOR, EST_NUEVO, CODUSUARIO, USUARIO, FECHA, DETALLES

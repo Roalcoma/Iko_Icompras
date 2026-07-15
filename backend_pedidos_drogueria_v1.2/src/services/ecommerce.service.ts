@@ -239,7 +239,8 @@ export class EcommerceService {
     static async getPedidos(search: string, page: number, limit: number): Promise<{ data: any[]; total: number }> {
         const pool = await connectDb();
         const filtro = `%${search ?? ''}%`;
-        const offset = (page - 1) * limit;
+        const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
+        const offset = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
 
         const totalRes = await pool.request()
             .input('F', mssql.NVarChar, filtro)
@@ -251,7 +252,7 @@ export class EcommerceService {
         const dataRes = await pool.request()
             .input('F',   mssql.NVarChar, filtro)
             .input('OFF', mssql.Int, offset)
-            .input('LIM', mssql.Int, limit)
+            .input('LIM', mssql.Int, safeLimit)
             .query(`
                 SELECT * FROM APP_ECOMMERCE_PEDIDOS
                 WHERE NOMBRE_CLIENTE LIKE @F OR NUMERO_PEDIDO LIKE @F OR RIF LIKE @F

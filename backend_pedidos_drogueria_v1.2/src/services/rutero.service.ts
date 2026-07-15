@@ -332,8 +332,10 @@ export class RuteroService {
                 )
             )`;
         }
-        req.input('OFFSET', mssql.Int, (page - 1) * limit);
-        req.input('LIMIT',  mssql.Int, limit);
+        const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
+        const offset = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
+        req.input('OFFSET', mssql.Int, offset);
+        req.input('LIMIT',  mssql.Int, safeLimit);
 
         const [dataRes, cntRes] = await Promise.all([
             req.query(`

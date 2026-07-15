@@ -43,12 +43,13 @@ export class ReclamosService {
 
     static async getReclamos(search: string, page: number, limit: number) {
         const pool = await connectDb();
-        const offset = (page - 1) * limit;
+        const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
+        const offset = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
         const filtro = search ? `%${search.toUpperCase()}%` : '%';
         const result = await pool.request()
             .input('FILTRO', mssql.NVarChar, filtro)
             .input('OFFSET', mssql.Int, offset)
-            .input('LIMIT', mssql.Int, limit)
+            .input('LIMIT', mssql.Int, safeLimit)
             .query(`
                 SELECT R.ID, R.CODCLIENTE, CL.NOMBRECLIENTE, R.NUMSERIE, R.NUMFACTURA, R.RECLAMO, R.FECHACREACION
                 FROM APP_RECLAMOS R

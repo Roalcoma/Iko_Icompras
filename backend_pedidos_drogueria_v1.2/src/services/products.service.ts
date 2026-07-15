@@ -61,13 +61,14 @@ export class ProductsService {
     // 2. FUNCIÓN PARA TRAER LOS PRODUCTOS PAGINADOS
     static async getProducts(articulo: string, page: number, limit: number, stockStatus: string = 'todos'): Promise<any[]> {
         try {
-            const offset = (page - 1) * limit;
+            const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
+            const offset = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
             const pool = await connectDb();
-            
+
             const result = await pool.request()
                 .input('ARTICULO', mssql.NVarChar, !articulo ? '%' : articulo)
                 .input('OFFSET', mssql.Int, offset)
-                .input('LIMIT', mssql.Int, limit)
+                .input('LIMIT', mssql.Int, safeLimit)
                 .input('STOCK_STATUS', mssql.VarChar, stockStatus)
                 .input('dptoPsico', mssql.Int, getDbConfig().dptoPsicotropicos)
                 .input('ALMACEN', mssql.VarChar(10), getDbConfig().codAlmacen)

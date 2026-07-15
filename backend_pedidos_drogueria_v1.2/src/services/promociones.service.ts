@@ -286,12 +286,13 @@ export class PromocionesService {
 
     static async getGruposArticulos(search: string, page: number, limit: number) {
         const pool = await connectDb();
-        const offset = (page - 1) * limit;
+        const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
+        const offset = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
         const filtro = search ? `%${search}%` : '%';
         const result = await pool.request()
             .input('FILTRO', mssql.NVarChar, filtro)
             .input('OFFSET', mssql.Int, offset)
-            .input('LIMIT', mssql.Int, limit)
+            .input('LIMIT', mssql.Int, safeLimit)
             .query(`
                 SELECT ID, NOMBRE, ACTIVO, TIPO, FECHACREACION,
                     (SELECT COUNT(*) FROM APP_GRUPOS_ARTICULOS_DETALLE WHERE IDGRUPO = G.ID) AS TOTALARTICULOS
@@ -401,7 +402,8 @@ export class PromocionesService {
     static async getArticulosDeGrupo(idGrupo: number, search: string, page: number, limit: number) {
         const tipo = await this.getTipoGrupoArticulos(idGrupo);
         const pool = await connectDb();
-        const offset = (page - 1) * limit;
+        const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
+        const offset = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
         const filtro = search ? `%${search.toUpperCase()}%` : '%';
 
         if (tipo === 'CONDICION') {
@@ -409,7 +411,7 @@ export class PromocionesService {
             if (condiciones.length === 0) return { data: [], total: 0 };
             const request = pool.request();
             const where = construirWhereCondiciones(condiciones as CondicionInput[], CAMPOS_ARTICULOS, request);
-            request.input('FILTRO', mssql.NVarChar, filtro).input('OFFSET', mssql.Int, offset).input('LIMIT', mssql.Int, limit);
+            request.input('FILTRO', mssql.NVarChar, filtro).input('OFFSET', mssql.Int, offset).input('LIMIT', mssql.Int, safeLimit);
             const result = await request.query(`
                 SELECT A.CODARTICULO, A.REFPROVEEDOR, ACL.DESCRIPCIONLARGA AS DESCRIPCION
                 FROM ARTICULOS A LEFT JOIN ARTICULOSCAMPOSLIBRES ACL ON ACL.CODARTICULO = A.CODARTICULO
@@ -434,7 +436,7 @@ export class PromocionesService {
             .input('IDGRUPO', mssql.Int, idGrupo)
             .input('FILTRO', mssql.NVarChar, filtro)
             .input('OFFSET', mssql.Int, offset)
-            .input('LIMIT', mssql.Int, limit)
+            .input('LIMIT', mssql.Int, safeLimit)
             .query(`
                 SELECT D.ID, D.CODARTICULO, A.REFPROVEEDOR, ACL.DESCRIPCIONLARGA AS DESCRIPCION
                 FROM APP_GRUPOS_ARTICULOS_DETALLE D
@@ -539,12 +541,13 @@ export class PromocionesService {
 
     static async getGruposClientes(search: string, page: number, limit: number) {
         const pool = await connectDb();
-        const offset = (page - 1) * limit;
+        const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
+        const offset = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
         const filtro = search ? `%${search}%` : '%';
         const result = await pool.request()
             .input('FILTRO', mssql.NVarChar, filtro)
             .input('OFFSET', mssql.Int, offset)
-            .input('LIMIT', mssql.Int, limit)
+            .input('LIMIT', mssql.Int, safeLimit)
             .query(`
                 SELECT ID, NOMBRE, ACTIVO, TIPO, FECHACREACION,
                     (SELECT COUNT(*) FROM APP_GRUPOS_CLIENTES_DETALLE WHERE IDGRUPO = G.ID) AS TOTALCLIENTES
@@ -654,7 +657,8 @@ export class PromocionesService {
     static async getClientesDeGrupo(idGrupo: number, search: string, page: number, limit: number) {
         const tipo = await this.getTipoGrupoClientes(idGrupo);
         const pool = await connectDb();
-        const offset = (page - 1) * limit;
+        const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
+        const offset = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
         const filtro = search ? `%${search.toUpperCase()}%` : '%';
 
         if (tipo === 'CONDICION') {
@@ -662,7 +666,7 @@ export class PromocionesService {
             if (condiciones.length === 0) return { data: [], total: 0 };
             const request = pool.request();
             const where = construirWhereCondiciones(condiciones as CondicionInput[], CAMPOS_CLIENTES, request);
-            request.input('FILTRO', mssql.NVarChar, filtro).input('OFFSET', mssql.Int, offset).input('LIMIT', mssql.Int, limit);
+            request.input('FILTRO', mssql.NVarChar, filtro).input('OFFSET', mssql.Int, offset).input('LIMIT', mssql.Int, safeLimit);
             const result = await request.query(`
                 SELECT CL.CODCLIENTE, CL.NOMBRECLIENTE, CL.CIF
                 FROM CLIENTES CL LEFT JOIN CLIENTESCAMPOSLIBRES CCL ON CCL.CODCLIENTE = CL.CODCLIENTE
@@ -687,7 +691,7 @@ export class PromocionesService {
             .input('IDGRUPO', mssql.Int, idGrupo)
             .input('FILTRO', mssql.NVarChar, filtro)
             .input('OFFSET', mssql.Int, offset)
-            .input('LIMIT', mssql.Int, limit)
+            .input('LIMIT', mssql.Int, safeLimit)
             .query(`
                 SELECT D.ID, D.CODCLIENTE, CL.NOMBRECLIENTE, CL.CIF
                 FROM APP_GRUPOS_CLIENTES_DETALLE D
@@ -790,12 +794,13 @@ export class PromocionesService {
 
     static async getPromociones(search: string, page: number, limit: number) {
         const pool = await connectDb();
-        const offset = (page - 1) * limit;
+        const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
+        const offset = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
         const filtro = search ? `%${search}%` : '%';
         const result = await pool.request()
             .input('FILTRO', mssql.NVarChar, filtro)
             .input('OFFSET', mssql.Int, offset)
-            .input('LIMIT', mssql.Int, limit)
+            .input('LIMIT', mssql.Int, safeLimit)
             .query(`
                 SELECT P.ID, P.NOMBRE, P.BASE, P.ALCANCE_CLIENTE, P.FECHAINICIO, P.FECHAFIN, P.ACTIVO
                 FROM APP_PROMOCIONES P
