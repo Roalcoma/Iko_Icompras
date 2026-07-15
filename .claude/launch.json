@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "iko-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173,
+      "cwd": "C:\\Users\\rodri\\ProyectosRodrigo\\Iko_Icompras\\frontend_pedidos_drogueria_v1.2"
+    },
+    {
+      "name": "iko-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 9000,
+      "cwd": "C:\\Users\\rodri\\ProyectosRodrigo\\Iko_Icompras\\backend_icompras_iko_v1.0"
+    }
+  ]
+}
