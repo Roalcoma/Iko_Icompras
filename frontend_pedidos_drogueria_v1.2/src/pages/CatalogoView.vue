@@ -33,6 +33,14 @@
                 @click="modalCliente.mostrar = true"
               >
                 <template v-slot:append-inner>
+                  <v-btn
+                    v-if="carritoStore.clienteSeleccionado"
+                    icon="mdi-close"
+                    variant="text"
+                    size="small"
+                    color="grey-darken-1"
+                    @click.stop="carritoStore.clienteSeleccionado = null"
+                  />
                   <v-btn color="primary" variant="elevated" size="small" @click="modalCliente.mostrar = true">
                     <v-icon size="18">mdi-magnify</v-icon>
                   </v-btn>
