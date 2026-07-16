@@ -100,11 +100,13 @@ export class EcommerceService {
                     archivo:       nombreArchivo,
                 };
             } else {
-                // f[2] = CODARTICULO interno (puede ser un entero); f[6] = EAN (puede no estar en el ERP)
+                // f[4]=cantidad solicitada, f[19]=cantdesp (contada); usamos contada
+                const cantDesp = parseInt(f[19] ?? '0') || 0;
+                if (cantDesp <= 0) continue; // no contado o sin stock: no insertar
                 items.push({
                     codArticulo:    (f[2] ?? '').trim(),
                     descripcion:    (f[3] ?? '').trim(),
-                    cantidad:       parseInt(f[4] ?? '0') || 0,
+                    cantidad:       cantDesp,
                     precioUnitario: parseFloat(f[5] ?? '0') || 0,
                 });
             }
