@@ -5,8 +5,9 @@ import { connectDb } from '../db/db.conection';
 import { PromocionesService } from './promociones.service';
 import { getDbConfig }        from './dbconfig.service';
 
-const VED     = Number(process.env.VED) || 1;
-const esquema = process.env.DB_ESQUEMA  || 'dbo';
+const VED        = Number(process.env.VED) || 1;
+const esquema    = process.env.DB_ESQUEMA  || 'dbo';
+const MAX_LINEAS = 18;
 
 export class EcommerceService {
 
@@ -437,24 +438,10 @@ export class EcommerceService {
             return { success: false, message: 'Ningún artículo del pedido fue encontrado en el sistema' };
 
         // 8. Helper: armar tabla e insertar un grupo (dentro de una transacción)
-        const insertarGrupo = async (sufijo: string, items: GrupoLinea[], tx: mssql.Transaction) => {
-            const orderIdGrupo = sufijo === 'normal' ? orderId : orderId + sufijo;
+        //    Si el grupo supera MAX_LINEAS, se parte en sub-pedidos con sufijo -1, -2, ...
+        const insertarGrupo = async (sufijo: string, items: GrupoLinea[], tx: mssql.Transaction): Promise<string[] | null> => {
+            const orderIdBase = sufijo === 'normal' ? orderId : orderId + sufijo;
             const estatus = 'AUTORIZADO';
-
-            const tabla = new mssql.Table(`${esquema}.LINEA_PED`);
-            tabla.create = false;
-            tabla.columns.add('ORDERID',        mssql.VarChar(50), { nullable: false });
-            tabla.columns.add('CODARTICULO',    mssql.Int,         { nullable: false });
-            tabla.columns.add('REFERENCIA',     mssql.VarChar(50), { nullable: true  });
-            tabla.columns.add('CODALMACEN',     mssql.VarChar(10), { nullable: false });
-            tabla.columns.add('IDTARIFAV',      mssql.Int,         { nullable: false });
-            tabla.columns.add('PRODUCTCOUNT',   mssql.Int,         { nullable: false });
-            tabla.columns.add('PRECIOUNITARIO', mssql.Float,       { nullable: false });
-            tabla.columns.add('DESCUENTO1',     mssql.Float,       { nullable: true  });
-            tabla.columns.add('DESCUENTO2',     mssql.Float,       { nullable: true  });
-            tabla.columns.add('DESCUENTO3',     mssql.Float,       { nullable: true  });
-            tabla.columns.add('DESCUENTO4',     mssql.Float,       { nullable: true  });
-            tabla.columns.add('PRECIOBRUTO',    mssql.Float,       { nullable: true  });
 
             const consolidated = new Map<number, { linea: any; art: (typeof items)[0]['art'] }>();
             for (const { linea: l, art } of items) {
@@ -478,11 +465,13 @@ export class EcommerceService {
                 for (const r of stockRes.recordset) stockMap.set(r.CODARTICULO, Number(r.STOCK));
             }
 
-            let total = 0;
+            // Resolver líneas con precio/cantidad final (descartando sin stock)
+            type RowData = { codarticulo: number; ref: string; cantidad: number; precioFinal: number; desc1: number; desc2: number; precioUsdBruto: number };
+            const rowsData: RowData[] = [];
             for (const { linea: l, art } of consolidated.values()) {
                 const stockDisponible = stockMap.get(art.codarticulo) ?? 0;
                 if (stockDisponible <= 0) {
-                    console.log(`[Ecommerce] ${orderIdGrupo}: artículo ${art.codarticulo} sin stock — descartado`);
+                    console.log(`[Ecommerce] ${orderIdBase}: artículo ${art.codarticulo} sin stock — descartado`);
                     continue;
                 }
                 const precioUsdBruto = art.precioUnitario;
@@ -490,40 +479,73 @@ export class EcommerceService {
                 const desc1 = art.nodto ? 0 : descuentoGlobal;
                 const desc2 = art.nodto ? 0 : (promoDescMap.get(art.codarticulo) ?? 0);
                 const precioFinal = precioUsdBruto * (1 - desc1 / 100) * (1 - desc2 / 100);
-                total += precioFinal * cantidad;
-                tabla.rows.add(orderIdGrupo, art.codarticulo, art.ref, 'ZAV', VED,
-                    cantidad, precioFinal, desc1, desc2, 0, 0, precioUsdBruto);
+                rowsData.push({ codarticulo: art.codarticulo, ref: art.ref, cantidad, precioFinal, desc1, desc2, precioUsdBruto });
             }
 
-            if (tabla.rows.length === 0) {
-                console.log(`[Ecommerce] ${orderIdGrupo}: todas las líneas sin stock — grupo omitido`);
+            if (rowsData.length === 0) {
+                console.log(`[Ecommerce] ${orderIdBase}: todas las líneas sin stock — grupo omitido`);
                 return null;
             }
 
-            await new mssql.Request(tx)
-                .input('ORDERID',     mssql.NVarChar(50), orderIdGrupo)
-                .input('CLIENTEID',   mssql.Int,          clienteId)
-                .input('CODVENDEDOR', mssql.Int,          codVendedor)
-                .input('TOTAL',       mssql.Float,        total)
-                .input('ESTATUS',     mssql.VarChar(50),  estatus)
-                .query(`
-                    INSERT INTO ${esquema}.CABECERA_PED (ORDERID, CLIENTEID, FECHA, ESTATUS, CODVENDEDOR, TOTALPRECIO)
-                    VALUES (@ORDERID, @CLIENTEID, GETDATE(), @ESTATUS,
-                        ISNULL(NULLIF((SELECT TOP 1 CAST(CCL.CODVENDEDOR AS INT) FROM CLIENTESCAMPOSLIBRES CCL WHERE CCL.CODCLIENTE = @CLIENTEID AND CCL.CODVENDEDOR IS NOT NULL AND LTRIM(RTRIM(CAST(CCL.CODVENDEDOR AS NVARCHAR)))!=''), 0), @CODVENDEDOR),
-                        @TOTAL)
-                `);
+            // Partir en bloques de MAX_LINEAS; si hay uno solo el ORDERID no cambia
+            const chunks: RowData[][] = [];
+            for (let i = 0; i < rowsData.length; i += MAX_LINEAS) chunks.push(rowsData.slice(i, i + MAX_LINEAS));
 
-            await new mssql.Request(tx).bulk(tabla);
+            const idsInsertados: string[] = [];
+            for (let ci = 0; ci < chunks.length; ci++) {
+                const chunk = chunks[ci];
+                // ponytail: solo agrega sufijo -N si hay más de un chunk
+                const orderIdGrupo = chunks.length === 1 ? orderIdBase : `${orderIdBase}-${ci + 1}`;
 
-            await new mssql.Request(tx)
-                .input('OID',     mssql.VarChar(50), orderIdGrupo)
-                .input('ESTATUS', mssql.VarChar(50), estatus)
-                .query(`
-                    INSERT INTO ${esquema}.APP_PEDIDO_LOG (ORDERID, EST_ANTERIOR, EST_NUEVO, USUARIO, DETALLES)
-                    VALUES (@OID, NULL, @ESTATUS, 'Ecommerce', 'Pedido importado desde integración Icompras')
-                `);
+                const tabla = new mssql.Table(`${esquema}.LINEA_PED`);
+                tabla.create = false;
+                tabla.columns.add('ORDERID',        mssql.VarChar(50), { nullable: false });
+                tabla.columns.add('CODARTICULO',    mssql.Int,         { nullable: false });
+                tabla.columns.add('REFERENCIA',     mssql.VarChar(50), { nullable: true  });
+                tabla.columns.add('CODALMACEN',     mssql.VarChar(10), { nullable: false });
+                tabla.columns.add('IDTARIFAV',      mssql.Int,         { nullable: false });
+                tabla.columns.add('PRODUCTCOUNT',   mssql.Int,         { nullable: false });
+                tabla.columns.add('PRECIOUNITARIO', mssql.Float,       { nullable: false });
+                tabla.columns.add('DESCUENTO1',     mssql.Float,       { nullable: true  });
+                tabla.columns.add('DESCUENTO2',     mssql.Float,       { nullable: true  });
+                tabla.columns.add('DESCUENTO3',     mssql.Float,       { nullable: true  });
+                tabla.columns.add('DESCUENTO4',     mssql.Float,       { nullable: true  });
+                tabla.columns.add('PRECIOBRUTO',    mssql.Float,       { nullable: true  });
 
-            return orderIdGrupo;
+                let total = 0;
+                for (const row of chunk) {
+                    total += row.precioFinal * row.cantidad;
+                    tabla.rows.add(orderIdGrupo, row.codarticulo, row.ref, 'ZAV', VED,
+                        row.cantidad, row.precioFinal, row.desc1, row.desc2, 0, 0, row.precioUsdBruto);
+                }
+
+                await new mssql.Request(tx)
+                    .input('ORDERID',     mssql.NVarChar(50), orderIdGrupo)
+                    .input('CLIENTEID',   mssql.Int,          clienteId)
+                    .input('CODVENDEDOR', mssql.Int,          codVendedor)
+                    .input('TOTAL',       mssql.Float,        total)
+                    .input('ESTATUS',     mssql.VarChar(50),  estatus)
+                    .query(`
+                        INSERT INTO ${esquema}.CABECERA_PED (ORDERID, CLIENTEID, FECHA, ESTATUS, CODVENDEDOR, TOTALPRECIO)
+                        VALUES (@ORDERID, @CLIENTEID, GETDATE(), @ESTATUS,
+                            ISNULL(NULLIF((SELECT TOP 1 CAST(CCL.CODVENDEDOR AS INT) FROM CLIENTESCAMPOSLIBRES CCL WHERE CCL.CODCLIENTE = @CLIENTEID AND CCL.CODVENDEDOR IS NOT NULL AND LTRIM(RTRIM(CAST(CCL.CODVENDEDOR AS NVARCHAR)))!=''), 0), @CODVENDEDOR),
+                            @TOTAL)
+                    `);
+
+                await new mssql.Request(tx).bulk(tabla);
+
+                await new mssql.Request(tx)
+                    .input('OID',     mssql.VarChar(50), orderIdGrupo)
+                    .input('ESTATUS', mssql.VarChar(50), estatus)
+                    .query(`
+                        INSERT INTO ${esquema}.APP_PEDIDO_LOG (ORDERID, EST_ANTERIOR, EST_NUEVO, USUARIO, DETALLES)
+                        VALUES (@OID, NULL, @ESTATUS, 'Ecommerce', 'Pedido importado desde integración Icompras')
+                    `);
+
+                idsInsertados.push(orderIdGrupo);
+            }
+
+            return idsInsertados;
         };
 
         // 9. Insertar cada grupo dentro de una transacción — si falla alguno, todos se revierten
@@ -532,8 +554,8 @@ export class EcommerceService {
         await tx.begin();
         try {
             for (const [sufijo, items] of gruposConLineas) {
-                const id = await insertarGrupo(sufijo, items, tx);
-                if (id !== null) idsCreados.push(id);
+                const ids = await insertarGrupo(sufijo, items, tx);
+                if (ids !== null) idsCreados.push(...ids);
             }
             await tx.commit();
         } catch (err) {
