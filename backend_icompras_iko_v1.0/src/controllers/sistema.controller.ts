@@ -23,7 +23,7 @@ export class SistemaController {
         try {
             const { server, user, password, dbName, esquema, port,
                     githubZipUrl, nssmServicioBackend, nssmServicioFrontend,
-                    intervaloEscaneo } = req.body;
+                    intervaloEscaneo, dptoPsicotropicos } = req.body;
             const cfg: any = {};
             if (server)                                     cfg.server = server;
             if (user)                                       cfg.user   = user;
@@ -34,7 +34,8 @@ export class SistemaController {
             if (githubZipUrl   !== undefined)               cfg.githubZipUrl   = githubZipUrl;
             if (nssmServicioBackend  !== undefined)         cfg.nssmServicioBackend  = nssmServicioBackend;
             if (nssmServicioFrontend !== undefined)         cfg.nssmServicioFrontend = nssmServicioFrontend;
-            if (intervaloEscaneo    !== undefined)          cfg.intervaloEscaneo = Math.max(5, Number(intervaloEscaneo));
+            if (intervaloEscaneo    !== undefined)          cfg.intervaloEscaneo    = Math.max(5, Number(intervaloEscaneo));
+            if (dptoPsicotropicos  !== undefined)          cfg.dptoPsicotropicos   = Number(dptoPsicotropicos);
 
             guardarDbConfig(cfg);
             if (server || user || password || dbName) await reconectarDb();

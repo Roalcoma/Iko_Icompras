@@ -33,6 +33,19 @@
           persistent-hint
           class="mt-3"
         />
+        <v-text-field
+          v-model.number="dptoPsicotropicos"
+          label="Departamento de psicotrópicos"
+          type="number"
+          min="1"
+          variant="outlined"
+          density="compact"
+          :loading="cargando"
+          :disabled="cargando"
+          hint="Código de departamento (SECCION) que identifica productos psicotrópicos."
+          persistent-hint
+          class="mt-3"
+        />
         <div class="d-flex ga-3 mt-4 flex-wrap">
           <v-btn color="primary" :loading="guardandoRuta" @click="guardarRuta">
             Guardar
@@ -111,8 +124,9 @@ import axios from 'axios'
 
 const api = import.meta.env.VITE_API_URL
 
-const ruta         = ref('')
-const intervalo    = ref(30)
+const ruta               = ref('')
+const intervalo          = ref(30)
+const dptoPsicotropicos  = ref(6)
 const cargando     = ref(false)
 const guardandoRuta = ref(false)
 const escaneando   = ref(false)
@@ -134,7 +148,8 @@ onMounted(async () => {
       axios.get(`${api}/sistema/db-config`),
     ])
     ruta.value         = r1.data.ruta ?? ''
-    intervalo.value    = r2.data.config?.intervaloEscaneo ?? 30
+    intervalo.value         = r2.data.config?.intervaloEscaneo    ?? 30
+    dptoPsicotropicos.value = r2.data.config?.dptoPsicotropicos  ?? 6
     githubZipUrl.value = r2.data.config?.githubZipUrl ?? ''
     nssmBackend.value  = r2.data.config?.nssmServicioBackend ?? ''
     nssmFrontend.value = r2.data.config?.nssmServicioFrontend ?? ''
@@ -150,7 +165,7 @@ async function guardarRuta() {
   try {
     await Promise.all([
       axios.put(`${api}/ecommerce/config`, { ruta: ruta.value }),
-      axios.post(`${api}/sistema/db-config/guardar`, { intervaloEscaneo: intervalo.value }),
+      axios.post(`${api}/sistema/db-config/guardar`, { intervaloEscaneo: intervalo.value, dptoPsicotropicos: dptoPsicotropicos.value }),
     ])
     tipoRuta.value    = 'success'
     mensajeRuta.value = 'Configuración guardada correctamente.'
