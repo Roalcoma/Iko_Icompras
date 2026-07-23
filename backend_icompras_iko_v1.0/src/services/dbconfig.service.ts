@@ -48,7 +48,7 @@ export function getDbConfig(): DbConfig {
         dbRutero:      file.dbRutero      ?? process.env.DB_RUTERO        ?? '',
         esquema:       file.esquema       ?? process.env.DB_ESQUEMA        ?? 'dbo',
         port:                Number(file.port                ?? process.env.DB_PORT          ?? 1433),
-        dptoPsicotropicos:   Number((file as any).dptoPsicotropicos  ?? 9),
+        dptoPsicotropicos:   Number((file as any).dptoPsicotropicos  ?? 6),
         tarifaBaseCatalogo:  Number((file as any).tarifaBaseCatalogo  ?? 2),
         codAlmacen:          String((file as any).codAlmacen ?? 'ZAV'),
         maxLineasPorPedido:  Number((file as any).maxLineasPorPedido ?? 50),
