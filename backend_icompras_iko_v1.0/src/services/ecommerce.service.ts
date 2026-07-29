@@ -342,19 +342,6 @@ export class EcommerceService {
             artReq.input('TARIFA', mssql.Int, getDbConfig().tarifaBaseCatalogo);
             const artPH  = barcodes.map((b, i) => { artReq.input(`b${i}`, mssql.NVarChar(50), b); return `@b${i}`; }).join(',');
             const artRes = await artReq.query(`
-                SELECT AL.CODBARRAS AS LOOKUP_KEY, A.CODARTICULO,
-                       ISNULL(A.NODTOAPLICABLE, 0)   AS NODTOAPLICABLE,
-                       ISNULL(A.REFPROVEEDOR,'')      AS REFPROVEEDOR,
-                       ISNULL(A.SECCION, 0)           AS SECCION,
-                       ISNULL(PCL.DIASPROTECCION, 0)  AS DIASPROTECCION,
-                       ISNULL(PV.PNETO, 0)            AS PNETO
-                FROM ARTICULOSLIN AL WITH (NOLOCK)
-                JOIN ARTICULOS A WITH (NOLOCK) ON A.CODARTICULO = AL.CODARTICULO
-                LEFT JOIN ARTICULOSCAMPOSLIBRES ACL WITH (NOLOCK) ON ACL.CODARTICULO = A.CODARTICULO
-                LEFT JOIN PROVEEDORESCAMPOSLIBRES PCL WITH (NOLOCK) ON PCL.CODPROVEEDOR = ACL.CODPROVEEDORICG
-                LEFT JOIN PRECIOSVENTA PV WITH (NOLOCK) ON PV.CODARTICULO = A.CODARTICULO AND PV.IDTARIFAV = @TARIFA
-                WHERE AL.CODBARRAS IN (${artPH})
-                UNION
                 SELECT CAST(A.CODARTICULO AS NVARCHAR(50)) AS LOOKUP_KEY, A.CODARTICULO,
                        ISNULL(A.NODTOAPLICABLE, 0)   AS NODTOAPLICABLE,
                        ISNULL(A.REFPROVEEDOR,'')      AS REFPROVEEDOR,
