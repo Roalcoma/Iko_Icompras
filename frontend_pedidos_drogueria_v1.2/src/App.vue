@@ -7,6 +7,14 @@
           <v-icon start>mdi-cog-outline</v-icon>
           Configuración
         </v-btn>
+        <v-btn variant="text" color="white" to="/pedidos">
+          <v-icon start>mdi-clipboard-list-outline</v-icon>
+          Pedidos
+        </v-btn>
+        <v-btn variant="text" color="white" to="/triangulacion">
+          <v-icon start>mdi-tag-multiple-outline</v-icon>
+          Promos
+        </v-btn>
         <v-btn variant="text" color="white" to="/actualizador">
           <v-icon start>mdi-update</v-icon>
           Actualizador

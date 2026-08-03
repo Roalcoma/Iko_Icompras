@@ -2,8 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import mssql from 'mssql';
 import { connectDb } from '../db/db.conection';
-import { PromocionesService } from './promociones.service';
-import { getDbConfig }        from './dbconfig.service';
+import { PromocionesService }   from './promociones.service';
+import { TriangulacionService } from './triangulacion.service';
+import { getDbConfig }          from './dbconfig.service';
 
 const VED        = Number(process.env.VED) || 1;
 const esquema    = process.env.DB_ESQUEMA  || 'dbo';
@@ -336,6 +337,7 @@ export class EcommerceService {
         const barcodeToArt = new Map<string, {
             codarticulo: number; nodto: boolean; ref: string;
             seccion: number; diasProteccion: number; precioUnitario: number;
+            codproveedor: string; codmarca: string;
         }>();
         if (barcodes.length > 0) {
             const artReq = pool.request();
@@ -347,11 +349,17 @@ export class EcommerceService {
                        ISNULL(A.REFPROVEEDOR,'')      AS REFPROVEEDOR,
                        ISNULL(A.SECCION, 0)           AS SECCION,
                        ISNULL(PCL.DIASPROTECCION, 0)  AS DIASPROTECCION,
-                       ISNULL(PV.PNETO, 0)            AS PNETO
+                       ISNULL(PV.PNETO, 0)            AS PNETO,
+                       ISNULL(CAST(RP.CODPROVEEDOR AS NVARCHAR(50)), '') AS CODPROVEEDOR,
+                       ISNULL(CAST(A.MARCA AS NVARCHAR(50)), '')         AS CODMARCA
                 FROM ARTICULOS A WITH (NOLOCK)
                 LEFT JOIN ARTICULOSCAMPOSLIBRES ACL WITH (NOLOCK) ON ACL.CODARTICULO = A.CODARTICULO
                 LEFT JOIN PROVEEDORESCAMPOSLIBRES PCL WITH (NOLOCK) ON PCL.CODPROVEEDOR = ACL.CODPROVEEDORICG
                 LEFT JOIN PRECIOSVENTA PV WITH (NOLOCK) ON PV.CODARTICULO = A.CODARTICULO AND PV.IDTARIFAV = @TARIFA
+                OUTER APPLY (
+                    SELECT TOP 1 CODPROVEEDOR FROM REFERENCIASPROV WITH (NOLOCK)
+                    WHERE CODARTICULO = A.CODARTICULO ORDER BY CODPROVEEDOR
+                ) RP
                 WHERE CAST(A.CODARTICULO AS NVARCHAR(50)) IN (${artPH})
             `);
             artRes.recordset.forEach((r: any) => {
@@ -362,6 +370,8 @@ export class EcommerceService {
                     seccion:        Number(r.SECCION),
                     diasProteccion: Number(r.DIASPROTECCION),
                     precioUnitario: Number(r.PNETO),
+                    codproveedor:   String(r.CODPROVEEDOR ?? ''),
+                    codmarca:       String(r.CODMARCA ?? ''),
                 });
             });
         }
@@ -401,6 +411,9 @@ export class EcommerceService {
             }
         } catch { /* sin promociones activas */ }
 
+        let promosTriangulacion: any[] = [];
+        try { promosTriangulacion = await TriangulacionService.getPromosActivas(); } catch { /* sin promos tri */ }
+
         // 7. Separar líneas en grupos: P (psicotrópico) > SD (sin dto) > NI (no indexado) > normal
         //    Misma lógica que CarritoView.vue
         type GrupoLinea = { linea: any; art: typeof barcodeToArt extends Map<any, infer V> ? V : never };
@@ -428,7 +441,7 @@ export class EcommerceService {
         //    Si el grupo supera MAX_LINEAS, se parte en sub-pedidos con sufijo -1, -2, ...
         const insertarGrupo = async (sufijo: string, items: GrupoLinea[], tx: mssql.Transaction): Promise<string[] | null> => {
             const orderIdBase = sufijo === 'normal' ? orderId : orderId + sufijo;
-            const estatus = 'AUTORIZADO';
+            const estatus = 'PENDIENTE';
 
             const consolidated = new Map<number, { linea: any; art: (typeof items)[0]['art'] }>();
             for (const { linea: l, art } of items) {
@@ -453,7 +466,7 @@ export class EcommerceService {
             }
 
             // Resolver líneas con precio/cantidad final (descartando sin stock)
-            type RowData = { codarticulo: number; ref: string; cantidad: number; precioFinal: number; desc1: number; desc2: number; precioUsdBruto: number };
+            type RowData = { codarticulo: number; ref: string; cantidad: number; precioFinal: number; desc1: number; desc2: number; desc3: number; precioUsdBruto: number; codproveedor: string; codmarca: string };
             const rowsData: RowData[] = [];
             for (const { linea: l, art } of consolidated.values()) {
                 const stockDisponible = stockMap.get(art.codarticulo) ?? 0;
@@ -466,12 +479,22 @@ export class EcommerceService {
                 const desc1 = art.nodto ? 0 : descuentoGlobal;
                 const desc2 = art.nodto ? 0 : (promoDescMap.get(art.codarticulo) ?? 0);
                 const precioFinal = precioUsdBruto * (1 - desc1 / 100) * (1 - desc2 / 100);
-                rowsData.push({ codarticulo: art.codarticulo, ref: art.ref, cantidad, precioFinal, desc1, desc2, precioUsdBruto });
+                rowsData.push({ codarticulo: art.codarticulo, ref: art.ref, cantidad, precioFinal, desc1, desc2, desc3: 0, precioUsdBruto, codproveedor: art.codproveedor, codmarca: art.codmarca });
             }
 
             if (rowsData.length === 0) {
                 console.log(`[Ecommerce] ${orderIdBase}: todas las líneas sin stock — grupo omitido`);
                 return null;
+            }
+
+            // Descuentos de triangulación → DESCUENTO3
+            const triMap = TriangulacionService.calcularDescPorArticulo(
+                promosTriangulacion,
+                new Map(rowsData.map(r => [r.codarticulo, { codproveedor: r.codproveedor, codmarca: r.codmarca, cantidad: r.cantidad, precioFinal: r.precioFinal }])),
+            );
+            for (const row of rowsData) {
+                row.desc3 = triMap.get(row.codarticulo) ?? 0;
+                if (row.desc3 > 0) row.precioFinal = row.precioFinal * (1 - row.desc3 / 100);
             }
 
             // Partir en bloques de MAX_LINEAS; si hay uno solo el ORDERID no cambia
@@ -503,7 +526,7 @@ export class EcommerceService {
                 for (const row of chunk) {
                     total += row.precioFinal * row.cantidad;
                     tabla.rows.add(orderIdGrupo, row.codarticulo, row.ref, 'ZAV', VED,
-                        row.cantidad, row.precioFinal, row.desc1, row.desc2, 0, 0, row.precioUsdBruto);
+                        row.cantidad, row.precioFinal, row.desc1, row.desc2, row.desc3, 0, row.precioUsdBruto);
                 }
 
                 await new mssql.Request(tx)
