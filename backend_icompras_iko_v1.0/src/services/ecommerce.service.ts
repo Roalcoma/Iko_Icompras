@@ -481,7 +481,7 @@ export class EcommerceService {
         //    Si el grupo supera MAX_LINEAS, se parte en sub-pedidos con sufijo -1, -2, ...
         const insertarGrupo = async (sufijo: string, items: GrupoLinea[], tx: mssql.Transaction): Promise<string[] | null> => {
             const orderIdBase = sufijo === 'normal' ? orderId : orderId + sufijo;
-            const estatus = 'PENDIENTE';
+            const estatus = 'AUTORIZADO';
 
             // Consolidar por (artículo + lote) — distintos lotes = líneas separadas
             const consolidated = new Map<string, { linea: any; art: (typeof items)[0]['art']; lote: string }>();
