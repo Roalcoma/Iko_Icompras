@@ -493,6 +493,37 @@ export class EcommerceService {
                 else    consolidated.set(key, { linea: { ...l }, art, lote });
             }
 
+            // Resolver lotes "N/A" → lote más próximo a vencer en ARTICULOSLIN
+            const naEntries = [...consolidated.entries()].filter(([, v]) => v.lote.toUpperCase() === 'N/A');
+            if (naEntries.length > 0) {
+                const naCods = [...new Set(naEntries.map(([, v]) => v.art.codarticulo))];
+                const naReq  = new mssql.Request(tx);
+                const naPH   = naCods.map((c, i) => { naReq.input(`na${i}`, mssql.Int, c); return `@na${i}`; }).join(',');
+                const naRes  = await naReq.query(`
+                    SELECT codarticulo, CODBARRAS FROM (
+                        SELECT CODARTICULO AS codarticulo, ISNULL(CODBARRAS,'') AS CODBARRAS,
+                               ROW_NUMBER() OVER (PARTITION BY CODARTICULO ORDER BY TRY_CONVERT(DATE, GARANTIACOMPRA, 103) ASC) AS RN
+                        FROM ARTICULOSLIN WITH (NOLOCK)
+                        WHERE CODARTICULO IN (${naPH})
+                          AND TRY_CONVERT(DATE, GARANTIACOMPRA, 103) IS NOT NULL
+                          AND CODBARRAS IS NOT NULL AND LTRIM(RTRIM(CODBARRAS)) != ''
+                    ) t WHERE RN = 1
+                `);
+                const loteMap = new Map<number, string>(
+                    naRes.recordset.map((r: any) => [Number(r.codarticulo), String(r.CODBARRAS)])
+                );
+                for (const [oldKey, val] of naEntries) {
+                    const resolved = loteMap.get(val.art.codarticulo) ?? '';
+                    if (!resolved) continue;
+                    consolidated.delete(oldKey);
+                    val.lote = resolved;
+                    const newKey = `${val.art.codarticulo}|${resolved}`;
+                    const existing = consolidated.get(newKey);
+                    if (existing) existing.linea = { ...existing.linea, CANTIDAD: Number(existing.linea.CANTIDAD) + Number(val.linea.CANTIDAD) };
+                    else consolidated.set(newKey, val);
+                }
+            }
+
             // Verificar stock disponible por artículo antes de insertar
             const codArticulos = [...new Set([...consolidated.values()].map(v => v.art.codarticulo))];
             const stockReq = new mssql.Request(tx);
