@@ -18,6 +18,8 @@ export class EcommerceService {
         try {
             const pool = await connectDb();
             await pool.request().query(`
+                -- ── Tablas propias de la integración ───────────────────────────────────
+
                 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'APP_ECOMMERCE_CONFIG')
                     CREATE TABLE APP_ECOMMERCE_CONFIG (
                         ID   INT PRIMARY KEY DEFAULT 1,
@@ -38,12 +40,16 @@ export class EcommerceService {
                         ESTATUS        NVARCHAR(50),
                         TOTAL          DECIMAL(18,2),
                         ARCHIVO        NVARCHAR(500),
-                        PROCESADO      BIT NOT NULL DEFAULT 0,
-                        FECHA_IMPORT   DATETIME NOT NULL DEFAULT GETDATE(),
-                        MENSAJE_ERROR  NVARCHAR(500) NULL
+                        PROCESADO      BIT          NOT NULL DEFAULT 0,
+                        FECHA_IMPORT   DATETIME     NOT NULL DEFAULT GETDATE(),
+                        MENSAJE_ERROR  NVARCHAR(500)    NULL,
+                        DESCUENTO_PCT  DECIMAL(5,2)     NULL
                     );
+                -- Columnas agregadas en versiones anteriores (instalaciones existentes)
                 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='APP_ECOMMERCE_PEDIDOS' AND COLUMN_NAME='MENSAJE_ERROR')
                     ALTER TABLE APP_ECOMMERCE_PEDIDOS ADD MENSAJE_ERROR NVARCHAR(500) NULL;
+                IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='APP_ECOMMERCE_PEDIDOS' AND COLUMN_NAME='DESCUENTO_PCT')
+                    ALTER TABLE APP_ECOMMERCE_PEDIDOS ADD DESCUENTO_PCT DECIMAL(5,2) NULL;
 
                 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_ECOMP_NUMARCH' AND object_id=OBJECT_ID('APP_ECOMMERCE_PEDIDOS'))
                     CREATE INDEX IX_ECOMP_NUMARCH ON APP_ECOMMERCE_PEDIDOS (NUMERO_PEDIDO, ARCHIVO);
@@ -51,15 +57,42 @@ export class EcommerceService {
                 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'APP_ECOMMERCE_LINEAS')
                     CREATE TABLE APP_ECOMMERCE_LINEAS (
                         ID              INT IDENTITY PRIMARY KEY,
-                        ID_PEDIDO       INT NOT NULL REFERENCES APP_ECOMMERCE_PEDIDOS(ID),
+                        ID_PEDIDO       INT          NOT NULL REFERENCES APP_ECOMMERCE_PEDIDOS(ID),
                         COD_ARTICULO    NVARCHAR(50),
                         DESCRIPCION     NVARCHAR(300),
                         CANTIDAD        INT,
-                        PRECIO_UNITARIO DECIMAL(18,2)
+                        PRECIO_UNITARIO DECIMAL(18,2),
+                        LOTE            NVARCHAR(50)     NULL,
+                        DESCUENTO1      DECIMAL(5,2)     NULL
                     );
+                IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='APP_ECOMMERCE_LINEAS' AND COLUMN_NAME='LOTE')
+                    ALTER TABLE APP_ECOMMERCE_LINEAS ADD LOTE NVARCHAR(50) NULL;
+                IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='APP_ECOMMERCE_LINEAS' AND COLUMN_NAME='DESCUENTO1')
+                    ALTER TABLE APP_ECOMMERCE_LINEAS ADD DESCUENTO1 DECIMAL(5,2) NULL;
 
                 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_ECOML_IDPEDIDO' AND object_id=OBJECT_ID('APP_ECOMMERCE_LINEAS'))
                     CREATE INDEX IX_ECOML_IDPEDIDO ON APP_ECOMMERCE_LINEAS (ID_PEDIDO);
+
+                -- Log de cambios de estatus de pedidos
+                IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'APP_PEDIDO_LOG')
+                    CREATE TABLE ${esquema}.APP_PEDIDO_LOG (
+                        ID           INT IDENTITY PRIMARY KEY,
+                        ORDERID      NVARCHAR(50)  NOT NULL,
+                        EST_ANTERIOR NVARCHAR(50)      NULL,
+                        EST_NUEVO    NVARCHAR(50)  NOT NULL,
+                        USUARIO      NVARCHAR(100)     NULL,
+                        DETALLES     NVARCHAR(500)     NULL,
+                        FECHA        DATETIME      NOT NULL DEFAULT GETDATE()
+                    );
+
+                -- ── Columnas extendidas sobre tablas ICG ───────────────────────────────
+
+                IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='LINEA_PED' AND COLUMN_NAME='LOTE')
+                    ALTER TABLE ${esquema}.LINEA_PED ADD LOTE NVARCHAR(50) NULL;
+                IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='LINEA_PED' AND COLUMN_NAME='TOTAL_BRUTO')
+                    ALTER TABLE ${esquema}.LINEA_PED ADD TOTAL_BRUTO FLOAT NULL;
+                IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='LINEA_PED' AND COLUMN_NAME='TOTAL_DESCUENTO')
+                    ALTER TABLE ${esquema}.LINEA_PED ADD TOTAL_DESCUENTO FLOAT NULL;
             `);
             console.log('[Ecommerce] Tablas verificadas/creadas');
         } catch (err) {
@@ -91,6 +124,8 @@ export class EcommerceService {
             if (f.length < 5) continue;
             // Header: campo[2] es fecha (YYYY-MM-DD ...)
             if (/^\d{4}-\d{2}-\d{2}/.test(f[2])) {
+                const totalBruto = parseFloat(f[16] ?? '0') || 0;
+                const descMonto  = parseFloat(f[17] ?? '0') || 0;
                 pedido = {
                     numeroPedido:  (f[0]  ?? '').trim(),
                     codCliente:    (f[1]  ?? '').trim(),
@@ -98,18 +133,23 @@ export class EcommerceService {
                     estatus:       (f[3]  ?? '').trim(),
                     nombreCliente: (f[10] ?? '').trim(),
                     rif:           (f[11] ?? '').trim(),
-                    total:         parseFloat(f[16] ?? '0') || 0,
+                    total:         totalBruto,
+                    descuentoPct:  totalBruto > 0 ? Math.round(descMonto / totalBruto * 10000) / 100 : 0,
                     archivo:       nombreArchivo,
                 };
             } else {
                 // f[4]=cantidad solicitada, f[19]=cantdesp (contada); usamos contada
                 const cantDesp = parseInt(f[19] ?? '0') || 0;
                 if (cantDesp <= 0) continue; // no contado o sin stock: no insertar
+                const dtoF47 = parseFloat(f[47] ?? '0') || 0;
+                const dtoF51 = parseFloat(f[51] ?? '0') || 0;
                 items.push({
                     codArticulo:    (f[2] ?? '').trim(),
                     descripcion:    (f[3] ?? '').trim(),
                     cantidad:       cantDesp,
                     precioUnitario: parseFloat(f[5] ?? '0') || 0,
+                    lote:           (f[24] ?? '').trim(),
+                    descuento1:     dtoF47 !== 0 ? dtoF47 : dtoF51,
                 });
             }
         }
@@ -167,12 +207,13 @@ export class EcommerceService {
                     .input('FECHA',  mssql.DateTime,       new Date(parsed.pedido.fecha))
                     .input('ESTATUS',mssql.NVarChar(50),   parsed.pedido.estatus)
                     .input('TOTAL',  mssql.Decimal(18, 2), parsed.pedido.total)
-                    .input('ARCH',   mssql.NVarChar(500),  archivo)
+                    .input('ARCH',    mssql.NVarChar(500),  archivo)
+                    .input('DESC_PCT', mssql.Decimal(5, 2), parsed.pedido.descuentoPct)
                     .query(`
                         INSERT INTO APP_ECOMMERCE_PEDIDOS
-                            (NUMERO_PEDIDO, COD_CLIENTE, NOMBRE_CLIENTE, RIF, FECHA, ESTATUS, TOTAL, ARCHIVO)
+                            (NUMERO_PEDIDO, COD_CLIENTE, NOMBRE_CLIENTE, RIF, FECHA, ESTATUS, TOTAL, ARCHIVO, DESCUENTO_PCT)
                         OUTPUT INSERTED.ID
-                        SELECT @NUM, @COD, @NOMBRE, @RIF, @FECHA, @ESTATUS, @TOTAL, @ARCH
+                        SELECT @NUM, @COD, @NOMBRE, @RIF, @FECHA, @ESTATUS, @TOTAL, @ARCH, @DESC_PCT
                         WHERE NOT EXISTS (
                             SELECT 1 FROM APP_ECOMMERCE_PEDIDOS
                             WHERE NUMERO_PEDIDO = @NUM AND ARCHIVO = @ARCH
@@ -195,10 +236,12 @@ export class EcommerceService {
                         .input('DESC',   mssql.NVarChar(300), l.descripcion)
                         .input('CANT',   mssql.Int,           l.cantidad)
                         .input('PRECIO', mssql.Decimal(18,2), l.precioUnitario)
+                        .input('LOTE',   mssql.NVarChar(50),  l.lote ?? '')
+                        .input('DTO1',   mssql.Decimal(5, 2), l.descuento1 ?? 0)
                         .query(`
                             INSERT INTO APP_ECOMMERCE_LINEAS
-                                (ID_PEDIDO, COD_ARTICULO, DESCRIPCION, CANTIDAD, PRECIO_UNITARIO)
-                            VALUES (@ID_PED, @COD, @DESC, @CANT, @PRECIO)
+                                (ID_PEDIDO, COD_ARTICULO, DESCRIPCION, CANTIDAD, PRECIO_UNITARIO, LOTE, DESCUENTO1)
+                            VALUES (@ID_PED, @COD, @DESC, @CANT, @PRECIO, @LOTE, @DTO1)
                         `);
                 }
 
@@ -317,18 +360,15 @@ export class EcommerceService {
             .input('COD', mssql.NVarChar(50), codCli)
             .input('RIF', mssql.NVarChar(50), rifCli)
             .query(`
-                SELECT C.CODCLIENTE,
-                       ISNULL(TRY_CAST(CCL.D1 AS FLOAT), 0) AS DESCUENTO_GLOBAL
-                FROM CLIENTES C WITH (NOLOCK)
-                LEFT JOIN CLIENTESCAMPOSLIBRES CCL WITH (NOLOCK) ON CCL.CODCLIENTE = C.CODCLIENTE
-                WHERE C.CODCLIENTE = TRY_CAST(@COD AS INT)
-                   OR C.CIF = @COD OR C.CIF = @RIF
+                SELECT CODCLIENTE FROM CLIENTES WITH (NOLOCK)
+                WHERE CODCLIENTE = TRY_CAST(@COD AS INT)
+                   OR CIF = @COD OR CIF = @RIF
             `);
         const cliente = clienteRes.recordset[0];
         if (!cliente) return { success: false, message: `Cliente "${codCli}" no encontrado en el sistema` };
 
-        const clienteId: number       = Number(cliente.CODCLIENTE);
-        const descuentoGlobal: number = Number(cliente.DESCUENTO_GLOBAL);
+        const clienteId: number    = Number(cliente.CODCLIENTE);
+        const descuentoPct: number = Number(ped.DESCUENTO_PCT ?? 0);
         const codVendedor: number     = VED;
 
         // 5. Resolver código → CODARTICULO + atributos para separación
@@ -443,15 +483,18 @@ export class EcommerceService {
             const orderIdBase = sufijo === 'normal' ? orderId : orderId + sufijo;
             const estatus = 'PENDIENTE';
 
-            const consolidated = new Map<number, { linea: any; art: (typeof items)[0]['art'] }>();
+            // Consolidar por (artículo + lote) — distintos lotes = líneas separadas
+            const consolidated = new Map<string, { linea: any; art: (typeof items)[0]['art']; lote: string }>();
             for (const { linea: l, art } of items) {
-                const ex = consolidated.get(art.codarticulo);
+                const lote = String(l.LOTE ?? '').trim();
+                const key  = `${art.codarticulo}|${lote}`;
+                const ex   = consolidated.get(key);
                 if (ex) ex.linea = { ...ex.linea, CANTIDAD: Number(ex.linea.CANTIDAD) + Number(l.CANTIDAD) };
-                else    consolidated.set(art.codarticulo, { linea: { ...l }, art });
+                else    consolidated.set(key, { linea: { ...l }, art, lote });
             }
 
             // Verificar stock disponible por artículo antes de insertar
-            const codArticulos = [...consolidated.keys()];
+            const codArticulos = [...new Set([...consolidated.values()].map(v => v.art.codarticulo))];
             const stockReq = new mssql.Request(tx);
             const stockPlaceholders = codArticulos.map((c, i) => { stockReq.input(`sc${i}`, mssql.Int, c); return `@sc${i}`; }).join(',');
             stockReq.input('ALMACEN_ST', mssql.VarChar(10), getDbConfig().codAlmacen);
@@ -466,9 +509,9 @@ export class EcommerceService {
             }
 
             // Resolver líneas con precio/cantidad final (descartando sin stock)
-            type RowData = { codarticulo: number; ref: string; cantidad: number; precioFinal: number; desc1: number; desc2: number; desc3: number; precioUsdBruto: number; codproveedor: string; codmarca: string };
+            type RowData = { codarticulo: number; ref: string; lote: string; cantidad: number; precioFinal: number; desc1: number; desc2: number; desc3: number; precioUsdBruto: number; codproveedor: string; codmarca: string };
             const rowsData: RowData[] = [];
-            for (const { linea: l, art } of consolidated.values()) {
+            for (const { linea: l, art, lote } of consolidated.values()) {
                 const stockDisponible = stockMap.get(art.codarticulo) ?? 0;
                 if (stockDisponible <= 0) {
                     console.log(`[Ecommerce] ${orderIdBase}: artículo ${art.codarticulo} sin stock — descartado`);
@@ -476,10 +519,10 @@ export class EcommerceService {
                 }
                 const precioUsdBruto = art.precioUnitario;
                 const cantidad       = Math.min(Number(l.CANTIDAD), stockDisponible);
-                const desc1 = art.nodto ? 0 : descuentoGlobal;
+                const desc1 = art.nodto ? 0 : Number(l.DESCUENTO1 ?? 0);
                 const desc2 = art.nodto ? 0 : (promoDescMap.get(art.codarticulo) ?? 0);
                 const precioFinal = precioUsdBruto * (1 - desc1 / 100) * (1 - desc2 / 100);
-                rowsData.push({ codarticulo: art.codarticulo, ref: art.ref, cantidad, precioFinal, desc1, desc2, desc3: 0, precioUsdBruto, codproveedor: art.codproveedor, codmarca: art.codmarca });
+                rowsData.push({ codarticulo: art.codarticulo, ref: art.ref, lote, cantidad, precioFinal, desc1, desc2, desc3: 0, precioUsdBruto, codproveedor: art.codproveedor, codmarca: art.codmarca });
             }
 
             if (rowsData.length === 0) {
@@ -521,12 +564,18 @@ export class EcommerceService {
                 tabla.columns.add('DESCUENTO3',     mssql.Float,       { nullable: true  });
                 tabla.columns.add('DESCUENTO4',     mssql.Float,       { nullable: true  });
                 tabla.columns.add('PRECIOBRUTO',    mssql.Float,       { nullable: true  });
+                tabla.columns.add('LOTE',           mssql.NVarChar(50),{ nullable: true  });
+                tabla.columns.add('TOTAL_BRUTO',    mssql.Float,       { nullable: true  });
+                tabla.columns.add('TOTAL_DESCUENTO',mssql.Float,       { nullable: true  });
 
                 let total = 0;
                 for (const row of chunk) {
-                    total += row.precioFinal * row.cantidad;
+                    const totalBrutoLinea = row.precioUsdBruto * row.cantidad;
+                    const totalFinalLinea = row.precioFinal    * row.cantidad;
+                    total += totalFinalLinea;
                     tabla.rows.add(orderIdGrupo, row.codarticulo, row.ref, 'ZAV', VED,
-                        row.cantidad, row.precioFinal, row.desc1, row.desc2, row.desc3, 0, row.precioUsdBruto);
+                        row.cantidad, row.precioFinal, row.desc1, row.desc2, row.desc3, 0, row.precioUsdBruto,
+                        row.lote, totalBrutoLinea, totalBrutoLinea - totalFinalLinea);
                 }
 
                 await new mssql.Request(tx)

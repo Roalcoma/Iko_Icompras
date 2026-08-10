@@ -7,47 +7,80 @@ const esquema = process.env.DB_ESQUEMA || 'dbo';
 
 export class PedidosCtrlService {
 
-    // Lista CABECERA_PED con prefijo EC-, opcionalmente filtrada por estatus
+    // Agrupa sub-pedidos por número base (EC-589, EC-589NI, EC-589P, etc. → un grupo "589")
     static async getPedidos(search: string, page: number, limit: number, estatus?: string): Promise<{ data: any[]; total: number }> {
         const pool = await connectDb();
-        const filtro = `%${search ?? ''}%`;
-        const safeLimit = limit === -1 ? 10000 : Math.max(1, limit);
-        const offset    = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
-
-        const estatusFiltro = estatus && estatus !== 'TODOS' ? estatus : null;
-
-        const totalRes = await pool.request()
-            .input('F',  mssql.NVarChar, filtro)
-            .input('ES', mssql.NVarChar(50), estatusFiltro)
-            .query(`
-                SELECT COUNT(*) AS T
-                FROM ${esquema}.CABECERA_PED CP WITH (NOLOCK)
-                WHERE CP.ORDERID LIKE 'EC-%'
-                  AND (@ES IS NULL OR CP.ESTATUS = @ES)
-                  AND (CP.ORDERID LIKE @F OR CAST(CP.CLIENTEID AS NVARCHAR) LIKE @F)
-            `);
 
         const dataRes = await pool.request()
-            .input('F',   mssql.NVarChar, filtro)
-            .input('ES',  mssql.NVarChar(50), estatusFiltro)
-            .input('OFF', mssql.Int, offset)
-            .input('LIM', mssql.Int, safeLimit)
             .query(`
                 SELECT CP.ORDERID, CP.CLIENTEID,
-                       ISNULL(C.NOMCLIENTE, CAST(CP.CLIENTEID AS NVARCHAR)) AS NOMBRE_CLIENTE,
+                       LEFT(SUBSTRING(CP.ORDERID,4,50),
+                           PATINDEX('%[^0-9]%', SUBSTRING(CP.ORDERID,4,50)+'X')-1) AS BASE_NUM,
+                       ISNULL(
+                           (SELECT TOP 1 EP.NOMBRE_CLIENTE FROM APP_ECOMMERCE_PEDIDOS EP WITH (NOLOCK)
+                            WHERE EP.NUMERO_PEDIDO = LEFT(SUBSTRING(CP.ORDERID,4,50),
+                                PATINDEX('%[^0-9]%', SUBSTRING(CP.ORDERID,4,50)+'X')-1)),
+                           CAST(CP.CLIENTEID AS NVARCHAR)
+                       ) AS NOMBRE_CLIENTE,
                        CP.ESTATUS, CP.FECHA,
                        ISNULL(CP.TOTALPRECIO, 0) AS TOTAL,
                        (SELECT COUNT(*) FROM ${esquema}.LINEA_PED LP WITH (NOLOCK) WHERE LP.ORDERID = CP.ORDERID) AS NLINEAS
                 FROM ${esquema}.CABECERA_PED CP WITH (NOLOCK)
-                LEFT JOIN CLIENTES C WITH (NOLOCK) ON C.CODCLIENTE = CP.CLIENTEID
                 WHERE CP.ORDERID LIKE 'EC-%'
-                  AND (@ES IS NULL OR CP.ESTATUS = @ES)
-                  AND (CP.ORDERID LIKE @F OR CAST(CP.CLIENTEID AS NVARCHAR) LIKE @F)
                 ORDER BY CP.FECHA DESC
-                OFFSET @OFF ROWS FETCH NEXT @LIM ROWS ONLY
             `);
 
-        return { data: dataRes.recordset, total: totalRes.recordset[0].T };
+        // Agrupar en TypeScript por BASE_NUM
+        const map = new Map<string, any>();
+        for (const r of dataRes.recordset) {
+            const base = r.BASE_NUM as string;
+            if (!map.has(base)) {
+                const suffix = (r.ORDERID as string).replace(/^EC-\d+/, '');
+                map.set(base, {
+                    baseNum:       base,
+                    baseOrderId:   `EC-${base}`,
+                    nombreCliente: r.NOMBRE_CLIENTE,
+                    clienteId:     r.CLIENTEID,
+                    fecha:         r.FECHA,
+                    subPedidos:    [],
+                    totalGeneral:  0,
+                });
+            }
+            const g = map.get(base)!;
+            const suffix = (r.ORDERID as string).replace(/^EC-\d+/, '');
+            g.subPedidos.push({
+                ORDERID: r.ORDERID,
+                SUFIJO:  suffix || 'Normal',
+                ESTATUS: r.ESTATUS,
+                TOTAL:   Number(r.TOTAL),
+                NLINEAS: r.NLINEAS,
+            });
+            g.totalGeneral += Number(r.TOTAL);
+        }
+
+        let grupos = [...map.values()].map(g => ({
+            ...g,
+            estatusGeneral: g.subPedidos.some((s: any) => s.ESTATUS === 'PENDIENTE') ? 'PENDIENTE' : 'AUTORIZADO',
+        }));
+
+        // Filtro de estatus sobre el grupo
+        if (estatus && estatus !== 'TODOS') {
+            grupos = grupos.filter(g => g.estatusGeneral === estatus);
+        }
+
+        // Filtro de búsqueda
+        if (search) {
+            const q = search.toLowerCase();
+            grupos = grupos.filter(g =>
+                g.baseOrderId.toLowerCase().includes(q) ||
+                g.nombreCliente.toLowerCase().includes(q)
+            );
+        }
+
+        const total     = grupos.length;
+        const safeLimit = limit === -1 ? total : Math.max(1, limit);
+        const offset    = limit === -1 ? 0 : (Math.max(1, page) - 1) * safeLimit;
+        return { data: grupos.slice(offset, offset + safeLimit), total };
     }
 
     // Líneas de un CABECERA_PED con descripción de artículo y todos los descuentos
@@ -58,17 +91,20 @@ export class PedidosCtrlService {
             .query(`
                 SELECT LP.CODARTICULO,
                        ISNULL(A.DESCRIPCION, CAST(LP.CODARTICULO AS NVARCHAR)) AS DESCRIPCION,
-                       LP.PRODUCTCOUNT   AS CANTIDAD,
-                       LP.PRECIOBRUTO    AS PRECIO_BRUTO,
-                       LP.PRECIOUNITARIO AS PRECIO_FINAL,
-                       ISNULL(LP.DESCUENTO1, 0) AS DESC1,
-                       ISNULL(LP.DESCUENTO2, 0) AS DESC2,
-                       ISNULL(LP.DESCUENTO3, 0) AS DESC3,
-                       ISNULL(LP.DESCUENTO4, 0) AS DESC4
+                       LP.PRODUCTCOUNT    AS CANTIDAD,
+                       LP.PRECIOBRUTO     AS PRECIO_BRUTO,
+                       LP.PRECIOUNITARIO  AS PRECIO_FINAL,
+                       ISNULL(LP.DESCUENTO1,     0) AS DESC1,
+                       ISNULL(LP.DESCUENTO2,     0) AS DESC2,
+                       ISNULL(LP.DESCUENTO3,     0) AS DESC3,
+                       ISNULL(LP.DESCUENTO4,     0) AS DESC4,
+                       ISNULL(LP.LOTE,          '') AS LOTE,
+                       ISNULL(LP.TOTAL_BRUTO,    0) AS TOTAL_BRUTO,
+                       ISNULL(LP.TOTAL_DESCUENTO,0) AS TOTAL_DESCUENTO
                 FROM ${esquema}.LINEA_PED LP WITH (NOLOCK)
                 LEFT JOIN ARTICULOS A WITH (NOLOCK) ON A.CODARTICULO = LP.CODARTICULO
                 WHERE LP.ORDERID = @OID
-                ORDER BY LP.CODARTICULO
+                ORDER BY LP.CODARTICULO, LP.LOTE
             `);
         return res.recordset;
     }
