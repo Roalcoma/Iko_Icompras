@@ -360,15 +360,19 @@ export class EcommerceService {
             .input('COD', mssql.NVarChar(50), codCli)
             .input('RIF', mssql.NVarChar(50), rifCli)
             .query(`
-                SELECT CODCLIENTE, ISNULL(IDTARIFAV, 1) AS IDTARIFAV FROM CLIENTES WITH (NOLOCK)
+                SELECT CODCLIENTE FROM CLIENTES WITH (NOLOCK)
                 WHERE CODCLIENTE = TRY_CAST(@COD AS INT)
                    OR CIF = @COD OR CIF = @RIF
             `);
         const cliente = clienteRes.recordset[0];
         if (!cliente) return { success: false, message: `Cliente "${codCli}" no encontrado en el sistema` };
 
-        const clienteId: number    = Number(cliente.CODCLIENTE);
-        const tarifaCliente: number = Number(cliente.IDTARIFAV) || getDbConfig().tarifaBaseCatalogo;
+        const clienteId: number = Number(cliente.CODCLIENTE);
+
+        const tarifaRes = await pool.request()
+            .input('CLI', mssql.Int, clienteId)
+            .query(`SELECT TOP 1 IDTARIFAV FROM TARIFASCLIENTE WITH (NOLOCK) WHERE CODCLIENTE = @CLI`);
+        const tarifaCliente: number = Number(tarifaRes.recordset[0]?.IDTARIFAV) || getDbConfig().tarifaBaseCatalogo;
         const descuentoPct: number = Number(ped.DESCUENTO_PCT ?? 0);
         const codVendedor: number  = VED;
 
