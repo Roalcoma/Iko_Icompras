@@ -360,7 +360,7 @@ export class EcommerceService {
             .input('COD', mssql.NVarChar(50), codCli)
             .input('RIF', mssql.NVarChar(50), rifCli)
             .query(`
-                SELECT CODCLIENTE FROM CLIENTES WITH (NOLOCK)
+                SELECT CODCLIENTE, ISNULL(IDTARIFAV, 1) AS IDTARIFAV FROM CLIENTES WITH (NOLOCK)
                 WHERE CODCLIENTE = TRY_CAST(@COD AS INT)
                    OR CIF = @COD OR CIF = @RIF
             `);
@@ -368,8 +368,9 @@ export class EcommerceService {
         if (!cliente) return { success: false, message: `Cliente "${codCli}" no encontrado en el sistema` };
 
         const clienteId: number    = Number(cliente.CODCLIENTE);
+        const tarifaCliente: number = Number(cliente.IDTARIFAV) || getDbConfig().tarifaBaseCatalogo;
         const descuentoPct: number = Number(ped.DESCUENTO_PCT ?? 0);
-        const codVendedor: number     = VED;
+        const codVendedor: number  = VED;
 
         // 5. Resolver código → CODARTICULO + atributos para separación
         //    Busca por CODBARRAS primero; fallback a CODARTICULO directo
@@ -381,7 +382,7 @@ export class EcommerceService {
         }>();
         if (barcodes.length > 0) {
             const artReq = pool.request();
-            artReq.input('TARIFA', mssql.Int, getDbConfig().tarifaBaseCatalogo);
+            artReq.input('TARIFA', mssql.Int, tarifaCliente);
             const artPH  = barcodes.map((b, i) => { artReq.input(`b${i}`, mssql.NVarChar(50), b); return `@b${i}`; }).join(',');
             const artRes = await artReq.query(`
                 SELECT CAST(A.CODARTICULO AS NVARCHAR(50)) AS LOOKUP_KEY, A.CODARTICULO,
@@ -604,7 +605,7 @@ export class EcommerceService {
                     const totalBrutoLinea = row.precioUsdBruto * row.cantidad;
                     const totalFinalLinea = row.precioFinal    * row.cantidad;
                     total += totalFinalLinea;
-                    tabla.rows.add(orderIdGrupo, row.codarticulo, row.ref, 'ZAV', VED,
+                    tabla.rows.add(orderIdGrupo, row.codarticulo, row.ref, 'ZAV', tarifaCliente,
                         row.cantidad, row.precioFinal, row.desc1, row.desc2, row.desc3, 0, row.precioUsdBruto,
                         row.lote, totalBrutoLinea, totalBrutoLinea - totalFinalLinea);
                 }
