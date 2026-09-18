@@ -6,9 +6,8 @@ import { PromocionesService }   from './promociones.service';
 import { TriangulacionService } from './triangulacion.service';
 import { getDbConfig }          from './dbconfig.service';
 
-const VED        = Number(process.env.VED) || 1;
-const esquema    = process.env.DB_ESQUEMA  || 'dbo';
-const MAX_LINEAS = 18;
+const VED     = Number(process.env.VED) || 1;
+const esquema = process.env.DB_ESQUEMA  || 'dbo';
 
 export class EcommerceService {
 
@@ -578,7 +577,8 @@ export class EcommerceService {
 
             // Partir en bloques de MAX_LINEAS; si hay uno solo el ORDERID no cambia
             const chunks: RowData[][] = [];
-            for (let i = 0; i < rowsData.length; i += MAX_LINEAS) chunks.push(rowsData.slice(i, i + MAX_LINEAS));
+            const maxLineas = getDbConfig().maxLineasPorPedido;
+            for (let i = 0; i < rowsData.length; i += maxLineas) chunks.push(rowsData.slice(i, i + maxLineas));
 
             const idsInsertados: string[] = [];
             for (let ci = 0; ci < chunks.length; ci++) {
